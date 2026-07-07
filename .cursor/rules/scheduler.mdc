@@ -1,0 +1,37 @@
+---
+description: Scheduler MVP — always read AGENTS.md first for current phase and tasks
+globs:
+alwaysApply: true
+---
+
+# Cursor Rules for Scheduler
+
+## Project Context
+**App:** Scheduler (working name)
+**Stack:** Next.js + TypeScript + Tailwind CSS, Supabase, OneSignal, Vercel
+**Stage:** MVP Development
+**User Level:** C — Learning while building (mix of AI-led and user-led tasks)
+
+## Directives
+1. **Master Plan:** Always read `AGENTS.md` first. It contains the current phase and tasks.
+2. **Documentation:** Refer to `agent_docs/` for tech stack details, code patterns, and testing guides.
+3. **Plan-First:** Propose a brief plan and wait for approval before coding.
+4. **Incremental Build:** Build one small feature at a time. Test frequently.
+5. **Pre-Commit:** If hooks exist, run them before commits; fix failures.
+6. **No Linting:** Do not act as a linter. Use `npm run lint` if needed.
+7. **Communication:** Be concise. Explain database and algorithm changes before implementing.
+8. **Memory:** Update `MEMORY.md` after major milestones.
+
+## Commands
+- `npm run dev` — Start dev server
+- `npm test` — Run unit tests (Vitest)
+- `npm run lint` — Check code style
+- `npm run build` — Production build
+
+## What NOT To Do
+- Do NOT delete files without explicit confirmation
+- Do NOT modify database schemas without backup plan
+- Do NOT add features not in the current phase
+- Do NOT skip tests for "simple" changes
+- Do NOT bypass failing tests or pre-commit hooks
+- Do NOT add Gmail or Slack integration in MVP (Google Calendar sync **is** in MVP)
