@@ -42,19 +42,36 @@ async function sendOneSignalPush(args: {
 }
 
 function isAuthorized(request: NextRequest): boolean {
-  const expectedSecret = process.env.CRON_SECRET;
+  const expectedSecret = process.env.CRON_SECRET?.trim();
   if (!expectedSecret) {
     return false;
   }
 
-  const headerSecret = request.headers.get('x-cron-secret');
-  if (headerSecret === expectedSecret) {
+  const headerSecret = request.headers.get('x-cron-secret')?.trim();
+  if (headerSecret && headerSecret === expectedSecret) {
     return true;
   }
 
   // cron-job.org free UI may only support GET URLs with no custom headers.
-  const querySecret = request.nextUrl.searchParams.get('secret');
-  return querySecret === expectedSecret;
+  const querySecret = request.nextUrl.searchParams.get('secret')?.trim();
+  return Boolean(querySecret && querySecret === expectedSecret);
+}
+
+function authDebug(request: NextRequest) {
+  const expectedSecret = process.env.CRON_SECRET?.trim() ?? '';
+  const querySecret = request.nextUrl.searchParams.get('secret')?.trim() ?? '';
+  const headerSecret = request.headers.get('x-cron-secret')?.trim() ?? '';
+
+  return {
+    hasCronSecretConfigured: Boolean(expectedSecret),
+    expectedSecretLength: expectedSecret.length,
+    providedQuerySecretLength: querySecret.length,
+    providedHeaderSecretLength: headerSecret.length,
+    querySecretProvided: querySecret.length > 0,
+    lengthsMatch:
+      (querySecret.length > 0 && querySecret.length === expectedSecret.length) ||
+      (headerSecret.length > 0 && headerSecret.length === expectedSecret.length),
+  };
 }
 
 async function runNotifications() {
@@ -133,13 +150,13 @@ async function runNotifications() {
   return NextResponse.json({ ok: true, notified });
 }
 
-function unauthorizedResponse() {
+function unauthorizedResponse(request: NextRequest) {
   return NextResponse.json(
     {
       ok: false,
       error: 'Unauthorized',
       // Helps debug env setup without leaking the secret value.
-      hasCronSecretConfigured: Boolean(process.env.CRON_SECRET),
+      ...authDebug(request),
     },
     { status: 401 }
   );
@@ -147,7 +164,7 @@ function unauthorizedResponse() {
 
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return unauthorizedResponse();
+    return unauthorizedResponse(request);
   }
 
   return runNotifications();
@@ -155,7 +172,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return unauthorizedResponse();
+    return unauthorizedResponse(request);
   }
 
   return runNotifications();
