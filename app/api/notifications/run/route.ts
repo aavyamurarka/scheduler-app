@@ -41,14 +41,23 @@ async function sendOneSignalPush(args: {
   }
 }
 
-export async function POST(request: NextRequest) {
+function isAuthorized(request: NextRequest): boolean {
   const expectedSecret = process.env.CRON_SECRET;
-  const gotSecret = request.headers.get('x-cron-secret');
-
-  if (!expectedSecret || gotSecret !== expectedSecret) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  if (!expectedSecret) {
+    return false;
   }
 
+  const headerSecret = request.headers.get('x-cron-secret');
+  if (headerSecret === expectedSecret) {
+    return true;
+  }
+
+  // cron-job.org free UI may only support GET URLs with no custom headers.
+  const querySecret = request.nextUrl.searchParams.get('secret');
+  return querySecret === expectedSecret;
+}
+
+async function runNotifications() {
   const onesignalAppId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
   const onesignalApiKey = process.env.ONESIGNAL_REST_API_KEY;
 
@@ -84,7 +93,6 @@ export async function POST(request: NextRequest) {
   let notified = 0;
   const taskIdsNotified: string[] = [];
 
-  // One notification per task (keeps copy simple and avoids batching edge cases).
   for (const task of dueTasks) {
     const { data: subs, error: subsError } = await supabase
       .from('push_subscriptions')
@@ -125,3 +133,18 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true, notified });
 }
 
+export async function GET(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  return runNotifications();
+}
+
+export async function POST(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  return runNotifications();
+}
