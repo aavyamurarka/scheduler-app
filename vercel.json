@@ -1,9 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/notifications/run",
-      "schedule": "* * * * *"
-    }
-  ]
-}
-
+{}
