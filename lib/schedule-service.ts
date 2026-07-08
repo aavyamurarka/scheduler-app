@@ -297,13 +297,70 @@ export function snapToFifteenMinutes(date: Date): Date {
   return new Date(Math.round(date.getTime() / ms) * ms);
 }
 
+/** Snap/clamp a proposed start into a free gap that fits `durationMinutes`. */
+export function clampStartIntoFreeGap(
+  proposedStart: Date,
+  durationMinutes: number,
+  gaps: TimeSlot[],
+  dayStart: Date,
+  dayEnd: Date
+): Date | null {
+  const durationMs = durationMinutes * 60 * 1000;
+  let start = snapToFifteenMinutes(proposedStart);
+
+  if (start < dayStart) start = new Date(dayStart);
+  if (start.getTime() + durationMs > dayEnd.getTime()) {
+    start = snapToFifteenMinutes(new Date(dayEnd.getTime() - durationMs));
+  }
+
+  const sorted = [...gaps].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  for (const gap of sorted) {
+    const gapMs = gap.end.getTime() - gap.start.getTime();
+    if (gapMs < durationMs) continue;
+
+    const latestStart = new Date(gap.end.getTime() - durationMs);
+    if (start >= gap.start && start <= latestStart) {
+      return snapToFifteenMinutes(start);
+    }
+  }
+
+  // Nearest viable gap by distance from proposed start.
+  let best: { start: Date; distance: number } | null = null;
+  for (const gap of sorted) {
+    const gapMs = gap.end.getTime() - gap.start.getTime();
+    if (gapMs < durationMs) continue;
+
+    const latestStart = new Date(gap.end.getTime() - durationMs);
+    const clamped =
+      proposedStart < gap.start
+        ? new Date(gap.start)
+        : proposedStart > latestStart
+          ? new Date(latestStart)
+          : new Date(proposedStart);
+    const snapped = snapToFifteenMinutes(clamped);
+    const safe =
+      snapped < gap.start
+        ? new Date(gap.start)
+        : snapped > latestStart
+          ? new Date(latestStart)
+          : snapped;
+    const distance = Math.abs(safe.getTime() - proposedStart.getTime());
+    if (!best || distance < best.distance) {
+      best = { start: safe, distance };
+    }
+  }
+
+  return best?.start ?? null;
+}
+
 export function validateFlexiblePlacement(args: {
   tasks: Task[];
   taskId: string;
   proposedStart: Date;
   dayStart: Date;
   dayEnd: Date;
-}): { ok: true; end: Date } | { ok: false; error: string } {
+}): { ok: true; start: Date; end: Date } | { ok: false; error: string } {
   const task = args.tasks.find((t) => t.id === args.taskId);
   if (!task) {
     return { ok: false, error: 'Task not found.' };
@@ -312,7 +369,19 @@ export function validateFlexiblePlacement(args: {
     return { ok: false, error: 'Only flexible tasks can be moved.' };
   }
 
-  const start = snapToFifteenMinutes(args.proposedStart);
+  const gaps = getTimelineFreeGaps(args.tasks, args.dayStart, args.dayEnd, task.id);
+  const start = clampStartIntoFreeGap(
+    args.proposedStart,
+    task.duration_minutes,
+    gaps,
+    args.dayStart,
+    args.dayEnd
+  );
+
+  if (!start) {
+    return { ok: false, error: 'No free gap large enough for this task.' };
+  }
+
   const end = new Date(start.getTime() + task.duration_minutes * 60 * 1000);
 
   if (start < args.dayStart || end > args.dayEnd) {
@@ -328,5 +397,5 @@ export function validateFlexiblePlacement(args: {
     }
   }
 
-  return { ok: true, end };
+  return { ok: true, start, end };
 }

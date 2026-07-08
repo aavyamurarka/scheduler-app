@@ -10,14 +10,15 @@ type AutoScheduleRefresherProps = {
 };
 
 const PERIODIC_SYNC_MS = 2 * 60 * 1000;
-const MIN_SYNC_GAP_MS = 20 * 1000;
+const MIN_SYNC_GAP_MS = 45 * 1000;
 
 /**
- * Keeps the day view fresh without a Sync button:
- * - on first mount (app open)
+ * Quietly refreshes calendar/schedule:
+ * - once shortly after open
  * - when the tab becomes visible again
- * - when the window is focused / clicked back into
- * - on a quiet periodic interval while the tab is visible
+ * - on a slow interval while visible
+ *
+ * Intentionally avoids pointer/focus spam so drag interactions stay smooth.
  */
 export function AutoScheduleRefresher({ isCalendarConnected }: AutoScheduleRefresherProps) {
   const router = useRouter();
@@ -27,6 +28,10 @@ export function AutoScheduleRefresher({ isCalendarConnected }: AutoScheduleRefre
   useEffect(() => {
     const refresh = async (force = false) => {
       if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      if (document.body.dataset.timelineDragging === '1') {
         return;
       }
 
@@ -55,8 +60,9 @@ export function AutoScheduleRefresher({ isCalendarConnected }: AutoScheduleRefre
       }
     };
 
-    // Immediate refresh when the app is opened.
-    void refresh(true);
+    const timeoutId = window.setTimeout(() => {
+      void refresh(true);
+    }, 2500);
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -64,27 +70,15 @@ export function AutoScheduleRefresher({ isCalendarConnected }: AutoScheduleRefre
       }
     };
 
-    const onFocus = () => {
-      void refresh();
-    };
-
-    const onPointer = () => {
-      void refresh();
-    };
-
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
-    // First interaction after idle also refreshes (throttled).
-    window.addEventListener('pointerdown', onPointer);
 
     const intervalId = window.setInterval(() => {
       void refresh();
     }, PERIODIC_SYNC_MS);
 
     return () => {
+      window.clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('pointerdown', onPointer);
       window.clearInterval(intervalId);
     };
   }, [isCalendarConnected, router]);

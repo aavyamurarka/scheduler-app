@@ -9,7 +9,6 @@ import {
   getSchedulableTasks,
   requireUserPreferences,
   runDayScheduleWithNotices,
-  snapToFifteenMinutes,
   validateFlexiblePlacement,
   type ReshuffleNotice,
 } from '@/lib/schedule-service';
@@ -128,7 +127,7 @@ export async function moveFlexibleTaskAction(args: {
       return { success: false, error: validation.error };
     }
 
-    const start = snapToFifteenMinutes(proposedStart);
+    const start = validation.start;
     const { error } = await supabase
       .from('tasks')
       .update({

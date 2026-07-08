@@ -1,15 +1,15 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import {
   clearManualLockAction,
   moveFlexibleTaskAction,
 } from '@/app/actions/tasks';
 import {
+  clampStartIntoFreeGap,
   getTimelineFreeGaps,
   isManuallyLockedFlexible,
-  snapToFifteenMinutes,
 } from '@/lib/schedule-service';
 import type { Task } from '@/lib/types';
 
@@ -19,6 +19,14 @@ type DayTimelineProps = {
   tasks: Task[];
   dayStartIso: string;
   dayEndIso: string;
+};
+
+type DragState = {
+  taskId: string;
+  durationMinutes: number;
+  offsetY: number;
+  ghostTop: number;
+  proposedStart: Date | null;
 };
 
 function formatHour(date: Date): string {
@@ -51,12 +59,32 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   const heightPx = totalMinutes * PX_PER_MINUTE;
 
   const trackRef = useRef<HTMLDivElement>(null);
-  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
-  const [ghostTop, setGhostTop] = useState<number | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const tasksRef = useRef(tasks);
+  const dayStartRef = useRef(dayStart);
+  const dayEndRef = useRef(dayEnd);
+  const heightPxRef = useRef(heightPx);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [now] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date());
+
+  tasksRef.current = tasks;
+  dayStartRef.current = dayStart;
+  dayEndRef.current = dayEnd;
+  heightPxRef.current = heightPx;
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      document.body.dataset.timelineDragging = '0';
+    };
+  }, []);
 
   const scheduled = useMemo(
     () =>
@@ -86,8 +114,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   );
 
   const freeGaps = useMemo(
-    () => getTimelineFreeGaps(tasks, dayStart, dayEnd, dragTaskId ?? undefined),
-    [tasks, dayStart, dayEnd, dragTaskId]
+    () => getTimelineFreeGaps(tasks, dayStart, dayEnd, drag?.taskId),
+    [tasks, dayStart, dayEnd, drag?.taskId]
   );
 
   const hourMarks = useMemo(() => {
@@ -107,45 +135,129 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   const nowOffset =
     now >= dayStart && now <= dayEnd ? minutesBetween(dayStart, now) * PX_PER_MINUTE : null;
 
-  function yToStart(clientY: number): Date | null {
-    const track = trackRef.current;
-    if (!track) return null;
-    const rect = track.getBoundingClientRect();
-    const y = Math.min(Math.max(0, clientY - rect.top), heightPx);
-    const minutes = y / PX_PER_MINUTE;
-    return snapToFifteenMinutes(new Date(dayStart.getTime() + minutes * 60 * 1000));
-  }
-
-  function placeGhost(clientY: number, durationMinutes: number) {
-    const start = yToStart(clientY);
-    if (!start) {
-      setGhostTop(null);
-      return;
+  useEffect(() => {
+    function clientYToRawStart(clientY: number, offsetY: number): Date | null {
+      const track = trackRef.current;
+      if (!track) return null;
+      const rect = track.getBoundingClientRect();
+      const y = Math.min(
+        Math.max(0, clientY - rect.top - offsetY),
+        heightPxRef.current
+      );
+      const minutes = y / PX_PER_MINUTE;
+      return new Date(dayStartRef.current.getTime() + minutes * 60 * 1000);
     }
-    const top = minutesBetween(dayStart, start) * PX_PER_MINUTE;
-    const maxTop = Math.max(0, heightPx - durationMinutes * PX_PER_MINUTE);
-    setGhostTop(Math.min(top, maxTop));
-  }
 
-  function onDrop(clientY: number, task: Task) {
-    const start = yToStart(clientY);
-    setDragTaskId(null);
-    setGhostTop(null);
-    if (!start) return;
+    function updateGhost(clientY: number, state: DragState) {
+      const raw = clientYToRawStart(clientY, state.offsetY);
+      if (!raw) return;
 
-    startTransition(async () => {
-      setError(null);
-      setMessage(null);
-      const result = await moveFlexibleTaskAction({
-        taskId: task.id,
-        scheduledStartIso: start.toISOString(),
-      });
-      if (!result.success) {
-        setError(result.error);
-      } else {
-        setMessage('Pinned to that slot.');
+      const gaps = getTimelineFreeGaps(
+        tasksRef.current,
+        dayStartRef.current,
+        dayEndRef.current,
+        state.taskId
+      );
+      const clamped = clampStartIntoFreeGap(
+        raw,
+        state.durationMinutes,
+        gaps,
+        dayStartRef.current,
+        dayEndRef.current
+      );
+
+      if (!clamped) {
+        const next = { ...state, proposedStart: null, ghostTop: state.ghostTop };
+        dragRef.current = next;
+        setDrag(next);
+        return;
       }
-    });
+
+      const top = minutesBetween(dayStartRef.current, clamped) * PX_PER_MINUTE;
+      const next = { ...state, proposedStart: clamped, ghostTop: top };
+      dragRef.current = next;
+      setDrag(next);
+    }
+
+    function endDrag(commit: boolean) {
+      const state = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      document.body.dataset.timelineDragging = '0';
+
+      if (!commit || !state?.proposedStart) {
+        return;
+      }
+
+      startTransition(async () => {
+        setError(null);
+        setMessage(null);
+        const result = await moveFlexibleTaskAction({
+          taskId: state.taskId,
+          scheduledStartIso: state.proposedStart!.toISOString(),
+        });
+        if (!result.success) {
+          setError(result.error);
+        } else {
+          setMessage('Pinned to that slot.');
+        }
+      });
+    }
+
+    function onMove(event: PointerEvent) {
+      const state = dragRef.current;
+      if (!state) return;
+      event.preventDefault();
+      updateGhost(event.clientY, state);
+    }
+
+    function onUp() {
+      if (!dragRef.current) return;
+      endDrag(true);
+    }
+
+    function onCancel() {
+      if (!dragRef.current) return;
+      endDrag(false);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+    };
+  }, [startTransition]);
+
+  function beginDrag(task: Task, event: React.PointerEvent<HTMLDivElement>) {
+    if (task.task_type !== 'flexible' || !task.scheduled_start) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const track = trackRef.current;
+    if (!track) return;
+
+    const blockTop =
+      minutesBetween(dayStart, new Date(task.scheduled_start)) * PX_PER_MINUTE;
+    const rect = track.getBoundingClientRect();
+    const pointerY = event.clientY - rect.top;
+    const offsetY = pointerY - blockTop;
+
+    setError(null);
+    setMessage(null);
+    document.body.dataset.timelineDragging = '1';
+
+    const initial: DragState = {
+      taskId: task.id,
+      durationMinutes: task.duration_minutes,
+      offsetY,
+      ghostTop: blockTop,
+      proposedStart: new Date(task.scheduled_start),
+    };
+    dragRef.current = initial;
+    setDrag(initial);
   }
 
   function resetLock(taskId: string) {
@@ -161,8 +273,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     });
   }
 
-  const draggingTask = dragTaskId
-    ? tasks.find((task) => task.id === dragTaskId) ?? null
+  const draggingTask = drag
+    ? tasks.find((task) => task.id === drag.taskId) ?? null
     : null;
 
   return (
@@ -189,7 +301,10 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
       <div className="relative overflow-hidden rounded-lg border border-[var(--glass-border)] bg-white/40">
         <div className="grid grid-cols-[3.5rem_minmax(0,1fr)]">
-          <div className="relative border-r border-[var(--glass-border)] bg-white/30" style={{ height: heightPx }}>
+          <div
+            className="relative border-r border-[var(--glass-border)] bg-white/30"
+            style={{ height: heightPx }}
+          >
             {hourMarks.map((mark) => {
               const top = minutesBetween(dayStart, mark) * PX_PER_MINUTE;
               return (
@@ -204,21 +319,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
             })}
           </div>
 
-          <div
-            ref={trackRef}
-            className="relative"
-            style={{ height: heightPx }}
-            onDragOver={(event) => {
-              if (!draggingTask) return;
-              event.preventDefault();
-              placeGhost(event.clientY, draggingTask.duration_minutes);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (!draggingTask) return;
-              onDrop(event.clientY, draggingTask);
-            }}
-          >
+          <div ref={trackRef} className="relative select-none" style={{ height: heightPx }}>
             {hourMarks.map((mark) => {
               const top = minutesBetween(dayStart, mark) * PX_PER_MINUTE;
               return (
@@ -236,12 +337,14 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               return (
                 <div
                   key={`gap-${index}`}
-                  className="absolute inset-x-2 rounded-md border border-dashed border-[rgba(95,127,104,0.35)] bg-[rgba(95,127,104,0.08)]"
+                  className="pointer-events-none absolute inset-x-2 rounded-md border border-dashed border-[rgba(95,127,104,0.35)] bg-[rgba(95,127,104,0.08)]"
                   style={{ top, height }}
                 >
-                  <span className="absolute left-2 top-1 text-[10px] font-medium uppercase tracking-wide text-[var(--accent-hot)]">
-                    Free
-                  </span>
+                  {height > 22 ? (
+                    <span className="absolute left-2 top-1 text-[10px] font-medium uppercase tracking-wide text-[var(--accent-hot)]">
+                      Free
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
@@ -259,14 +362,27 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               </div>
             ) : null}
 
-            {ghostTop !== null && draggingTask ? (
+            {drag && draggingTask ? (
               <div
-                className="pointer-events-none absolute inset-x-3 z-10 rounded-md border border-[var(--accent)] bg-[rgba(95,127,104,0.2)] opacity-80"
+                className={`pointer-events-none absolute inset-x-3 z-30 rounded-md border px-2.5 py-1.5 shadow-md ${
+                  drag.proposedStart
+                    ? 'border-[var(--accent)] bg-[rgba(95,127,104,0.28)]'
+                    : 'border-[#c45c48] bg-[rgba(196,92,72,0.2)]'
+                }`}
                 style={{
-                  top: ghostTop,
-                  height: draggingTask.duration_minutes * PX_PER_MINUTE,
+                  top: drag.ghostTop,
+                  height: Math.max(28, draggingTask.duration_minutes * PX_PER_MINUTE),
                 }}
-              />
+              >
+                <p className="truncate text-xs font-semibold text-[var(--ink)]">
+                  {draggingTask.title}
+                </p>
+                <p className="text-[10px] text-[var(--ink-muted)]">
+                  {drag.proposedStart
+                    ? `${formatHour(drag.proposedStart)} · releasing pins here`
+                    : 'No free gap here'}
+                </p>
+              </div>
             ) : null}
 
             {scheduled.map((task) => {
@@ -282,30 +398,24 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               const isNow = start <= now && end > now;
               const isFlexible = task.task_type === 'flexible';
               const isFixed = task.task_type === 'fixed';
+              const isDragging = drag?.taskId === task.id;
 
               return (
                 <div
                   key={task.id}
-                  draggable={isFlexible}
-                  onDragStart={(event) => {
+                  onPointerDown={(event) => {
                     if (!isFlexible) return;
-                    setError(null);
-                    setMessage(null);
-                    setDragTaskId(task.id);
-                    event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('text/plain', task.id);
+                    beginDrag(task, event);
                   }}
-                  onDragEnd={() => {
-                    setDragTaskId(null);
-                    setGhostTop(null);
-                  }}
-                  className={`absolute inset-x-3 z-[5] overflow-hidden rounded-md border px-2.5 py-1.5 shadow-sm ${
+                  className={`absolute inset-x-3 z-[5] overflow-hidden rounded-md border px-2.5 py-1.5 shadow-sm transition-opacity ${
+                    isDragging ? 'opacity-30' : 'opacity-100'
+                  } ${
                     isNow
                       ? 'border-[#c45c48] bg-[rgba(196,92,72,0.16)] ring-2 ring-[#c45c48]/40'
                       : isFixed
                         ? 'border-[var(--glass-border-strong)] bg-white/80'
                         : 'border-[rgba(95,127,104,0.35)] bg-[linear-gradient(120deg,rgba(95,127,104,0.18),rgba(255,255,255,0.75))]'
-                  } ${isFlexible ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+                  } ${isFlexible ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-default'}`}
                   style={{ top, height }}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -342,6 +452,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                         <button
                           type="button"
                           className="text-[10px] font-medium text-[var(--accent-hot)] underline"
+                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => resetLock(task.id)}
                         >
                           Auto
