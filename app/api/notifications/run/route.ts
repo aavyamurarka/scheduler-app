@@ -133,9 +133,21 @@ async function runNotifications() {
   return NextResponse.json({ ok: true, notified });
 }
 
+function unauthorizedResponse() {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: 'Unauthorized',
+      // Helps debug env setup without leaking the secret value.
+      hasCronSecretConfigured: Boolean(process.env.CRON_SECRET),
+    },
+    { status: 401 }
+  );
+}
+
 export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   return runNotifications();
@@ -143,7 +155,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   return runNotifications();
