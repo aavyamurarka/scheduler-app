@@ -77,17 +77,24 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="glass-strong bubble-lg w-full max-w-md p-6 sm:p-8">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold text-zinc-900">Scheduler</h1>
-        <p className="mt-2 text-sm text-zinc-600">
-          {isLogin ? 'Sign in to your account' : 'Create your account'}
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-hot)]">
+          Scheduler
+        </p>
+        <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight text-[var(--ink)]">
+          {isLogin ? 'Welcome back' : 'Create your space'}
+        </h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          {isLogin
+            ? 'Sign in to pick up today’s already-arranged plan.'
+            : 'Dump the chaos. We’ll place it around what is fixed.'}
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-medium text-zinc-700">
+          <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-[var(--ink-muted)]">
             Email
           </label>
           <input
@@ -97,12 +104,15 @@ export function AuthForm({ mode }: AuthFormProps) {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+            className="field"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium text-zinc-700">
+          <label
+            htmlFor="password"
+            className="mb-1.5 block text-sm font-medium text-[var(--ink-muted)]"
+          >
             Password
           </label>
           <input
@@ -113,43 +123,39 @@ export function AuthForm({ mode }: AuthFormProps) {
             minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+            className="field"
           />
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <p className="alert alert-error" role="alert">
             {error}
           </p>
         )}
 
         {message && (
-          <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800" role="status">
+          <p className="alert alert-info" role="status">
             {message}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-        >
+        <button type="submit" disabled={loading} className="btn-primary w-full text-sm">
           {loading ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-zinc-600">
+      <p className="mt-6 text-center text-sm text-[var(--ink-muted)]">
         {isLogin ? (
           <>
             No account?{' '}
-            <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-700">
+            <Link href="/signup" className="font-medium text-[var(--accent-hot)] hover:underline">
               Sign up
             </Link>
           </>
         ) : (
           <>
             Already have an account?{' '}
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-700">
+            <Link href="/login" className="font-medium text-[var(--accent-hot)] hover:underline">
               Sign in
             </Link>
           </>

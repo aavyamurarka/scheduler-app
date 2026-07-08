@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Fraunces, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const display = Fraunces({
+  variable: "--font-display",
+  subsets: ["latin"],
+});
+
+const body = DM_Sans({
+  variable: "--font-body",
   subsets: ["latin"],
 });
 
@@ -28,9 +33,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="shell min-h-full flex flex-col">
         {oneSignalAppId ? (
           <Script
             src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"

@@ -22,18 +22,19 @@ export default async function PreferencesPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 items-center justify-center bg-zinc-50 px-4 py-12">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden px-4 py-12">
+      <div
+        className="ambient-orb -left-8 bottom-16 h-48 w-48 bg-[radial-gradient(circle,rgba(90,140,180,0.22),transparent_70%)]"
+        aria-hidden
+      />
+      <div className="w-full max-w-md">
         <PreferencesForm
           mode="edit"
           initialWakeTime={preferences.wake_time}
           initialSleepTime={preferences.sleep_time}
         />
         <div className="mt-6 text-center">
-          <Link
-            href="/"
-            className="text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
+          <Link href="/" className="text-sm font-medium text-[var(--accent-hot)] hover:underline">
             Back to schedule
           </Link>
         </div>
@@ -41,4 +42,3 @@ export default async function PreferencesPage() {
     </div>
   );
 }
-

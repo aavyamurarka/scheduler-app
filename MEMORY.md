@@ -5,12 +5,12 @@ DO NOT delete historical context if it is still relevant. Compress older complet
 -->
 
 ## 🏗️ Active Phase & Goal
-**Current Phase:** Phase 2 — Core Features
-**Current Task:** Onboarding complete — ready for Step 2.5 (real-time reshuffle)
+**Current Phase:** Phase 3 — Notifications & Polish (near launch)
+**Current Task:** Warm dark glass UX polish shipped; ready for beta/launch checks
 **Next Steps:**
-1. Implement `lib/scheduler.ts` greedy algorithm
-2. Add priority and deadline fields to task input
-3. Build day view with scheduled time slots
+1. Manual E2E on Vercel (push notifications + calendar auto-sync)
+2. Beta with a few users / critical bugfixes
+3. Optional: light DAU analytics
 
 ## 📂 Architectural Decisions
 *(Log specific choices made during the build here so future agents respect them)*
@@ -20,6 +20,9 @@ DO NOT delete historical context if it is still relevant. Compress older complet
 - 2026-07-05 — **OneSignal for push notifications** — Easier than native Web Push for a first build
 - 2026-07-05 — **Supabase for backend** — Postgres + Auth + Realtime + RLS in one free-tier platform
 - 2026-07-06 — **User wake/sleep preferences** — scheduling window from `user_preferences` table (onboarding on first login)
+- 2026-07-08 — **Pre-task push via external cron** — Hobby Vercel can't do 1-min cron; `/api/notifications/run` + cron-job.org (https + `?secret=`)
+- 2026-07-08 — **Calendar auto-sync** — timezone-aware day import, cleanup of yesterday's Google tasks, refresh on open/focus (no Sync button)
+- 2026-07-08 — **UX direction** — warm dark glass (espresso + copper glow), translucent bubbles; Fraunces display + DM Sans body; avoid plain-white / purple-AI look
 
 ## 🐛 Known Issues & Quirks
 *(Log current bugs or weird workarounds here)*

@@ -19,8 +19,7 @@ function defaultDateTimeLocal(): string {
   return local.toISOString().slice(0, 16);
 }
 
-const inputClassName =
-  'w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20';
+const labelClass = 'mb-1.5 block text-sm font-medium text-[var(--ink-muted)]';
 
 export function TaskInput() {
   const formRef = useRef<HTMLFormElement>(null);
@@ -49,15 +48,15 @@ export function TaskInput() {
   const isFixed = taskType === 'fixed';
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6">
-      <h2 className="text-base font-semibold text-zinc-900">Add a task</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Fixed = classes and meetings with a set time. Flexible = auto-scheduled around your day.
+    <section className="glass bubble-lg p-4 sm:p-6">
+      <h2 className="font-display text-lg font-semibold text-[var(--ink)]">Add a task</h2>
+      <p className="mt-1 text-sm text-[var(--ink-muted)]">
+        Fixed = set time. Flexible = auto-placed around your day.
       </p>
 
-      <form ref={formRef} action={formAction} className="mt-4 space-y-4">
+      <form ref={formRef} action={formAction} className="mt-5 space-y-4">
         <div>
-          <label htmlFor="title" className="mb-1 block text-sm font-medium text-zinc-700">
+          <label htmlFor="title" className={labelClass}>
             Title
           </label>
           <input
@@ -66,13 +65,13 @@ export function TaskInput() {
             type="text"
             required
             placeholder={isFixed ? 'e.g. CS lecture' : 'e.g. Groceries, reply to email'}
-            className={inputClassName}
+            className="field"
           />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="task_type" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label htmlFor="task_type" className={labelClass}>
               Type
             </label>
             <select
@@ -81,7 +80,7 @@ export function TaskInput() {
               required
               value={taskType}
               onChange={(e) => setTaskType(e.target.value as TaskType)}
-              className={inputClassName}
+              className="field"
             >
               <option value="flexible">Flexible</option>
               <option value="fixed">Fixed</option>
@@ -89,10 +88,7 @@ export function TaskInput() {
           </div>
 
           <div>
-            <label
-              htmlFor="duration_minutes"
-              className="mb-1 block text-sm font-medium text-zinc-700"
-            >
+            <label htmlFor="duration_minutes" className={labelClass}>
               Duration (minutes)
             </label>
             <input
@@ -103,17 +99,14 @@ export function TaskInput() {
               min={1}
               step={1}
               defaultValue={30}
-              className={inputClassName}
+              className="field"
             />
           </div>
         </div>
 
         {isFixed ? (
           <div>
-            <label
-              htmlFor="scheduled_start"
-              className="mb-1 block text-sm font-medium text-zinc-700"
-            >
+            <label htmlFor="scheduled_start" className={labelClass}>
               Start time
             </label>
             <input
@@ -122,22 +115,16 @@ export function TaskInput() {
               type="datetime-local"
               required
               defaultValue={defaultDateTimeLocal()}
-              className={inputClassName}
+              className="field"
             />
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="priority" className="mb-1 block text-sm font-medium text-zinc-700">
+              <label htmlFor="priority" className={labelClass}>
                 Priority
               </label>
-              <select
-                id="priority"
-                name="priority"
-                required
-                defaultValue={3}
-                className={inputClassName}
-              >
+              <select id="priority" name="priority" required defaultValue={3} className="field">
                 <option value={1}>1 — Highest</option>
                 <option value={2}>2 — High</option>
                 <option value={3}>3 — Medium</option>
@@ -147,42 +134,33 @@ export function TaskInput() {
             </div>
 
             <div>
-              <label htmlFor="deadline" className="mb-1 block text-sm font-medium text-zinc-700">
-                Deadline <span className="font-normal text-zinc-400">(optional)</span>
+              <label htmlFor="deadline" className={labelClass}>
+                Deadline <span className="font-normal text-[var(--ink-faint)]">(optional)</span>
               </label>
-              <input
-                id="deadline"
-                name="deadline"
-                type="datetime-local"
-                className={inputClassName}
-              />
+              <input id="deadline" name="deadline" type="datetime-local" className="field" />
             </div>
           </div>
         )}
 
         {state && !state.success && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <p className="alert alert-error" role="alert">
             {state.error}
           </p>
         )}
 
         {state?.success && (
-          <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+          <p className="alert alert-ok" role="status">
             Task added.
           </p>
         )}
 
         {reshuffleMessage && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          <p className="alert alert-warn" role="status">
             {reshuffleMessage}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60 sm:w-auto"
-        >
+        <button type="submit" disabled={pending} className="btn-primary w-full text-sm sm:w-auto">
           {pending ? 'Adding…' : 'Add task'}
         </button>
       </form>

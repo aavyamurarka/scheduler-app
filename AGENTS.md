@@ -59,14 +59,14 @@ Load only when needed:
 - [ ] Mid-day reshuffle in-app alerts (what moved and when; push in Phase 3)
 
 ### Phase 3: Notifications & Polish (Days 8–9)
-- [ ] OneSignal integration — 15-minute pre-task push notifications
-- [ ] Reshuffle alert notifications
-- [ ] Styling pass: simple, neutral palette, one accent color
-- [ ] Mobile responsiveness and accessibility basics
+- [x] OneSignal integration — 15-minute pre-task push notifications (external minute cron on Hobby)
+- [ ] Reshuffle alert notifications (deprioritized for MVP)
+- [x] Styling pass: warm dark glass + copper accent (not plain white)
+- [x] Mobile responsiveness and accessibility basics
 
 ### Phase 4: Launch (Day 10)
 - [ ] Beta test with 5 users, fix critical bugs
-- [ ] Deploy to Vercel
+- [x] Deploy to Vercel
 - [ ] Confirm RLS, notifications, and end-to-end user journey
 - [ ] Basic DAU analytics
 

@@ -96,7 +96,6 @@ export function PushNotificationsPanel() {
 
       const OneSignal = await ensureOneSignalReady();
 
-      // Triggers the browser prompt if needed.
       await OneSignal.Notifications.requestPermission();
       await OneSignal.User.PushSubscription.optIn();
 
@@ -120,16 +119,16 @@ export function PushNotificationsPanel() {
   }
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6">
-      <h2 className="text-base font-semibold text-zinc-900">Notifications</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Get a push notification 15 minutes before a scheduled task starts.
+    <section className="glass bubble-lg p-4 sm:p-6">
+      <h2 className="font-display text-lg font-semibold text-[var(--ink)]">Notifications</h2>
+      <p className="mt-1 text-sm text-[var(--ink-muted)]">
+        Get a push 15 minutes before a scheduled task starts.
       </p>
 
       {!appId ? (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Set <code className="font-mono">NEXT_PUBLIC_ONESIGNAL_APP_ID</code> in{' '}
-          <code className="font-mono">.env.local</code> to enable this.
+        <p className="alert alert-warn mt-3">
+          Set <code className="font-mono text-[0.8rem]">NEXT_PUBLIC_ONESIGNAL_APP_ID</code> to
+          enable this.
         </p>
       ) : null}
 
@@ -138,24 +137,23 @@ export function PushNotificationsPanel() {
           type="button"
           onClick={handleEnable}
           disabled={loading || !appId}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          className="btn-primary text-sm"
         >
           {loading ? 'Enabling…' : 'Enable notifications'}
         </button>
       </div>
 
       {message ? (
-        <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+        <p className="alert alert-ok mt-3" role="status">
           {message}
         </p>
       ) : null}
 
       {error ? (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <p className="alert alert-error mt-3" role="alert">
           {error}
         </p>
       ) : null}
     </section>
   );
 }
-

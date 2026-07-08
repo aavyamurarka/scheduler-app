@@ -27,29 +27,21 @@ function ScheduleRow({ task }: { task: Task }) {
 
   return (
     <li
-      className={`flex gap-3 rounded-lg border px-4 py-3 ${
-        isFixed
-          ? 'border-zinc-200 bg-zinc-50'
-          : 'border-blue-200 bg-white'
+      className={`flex gap-3 rounded-2xl px-4 py-3.5 ${
+        isFixed ? 'row-glass' : 'row-accent'
       }`}
     >
-      <div className="w-16 shrink-0 text-sm font-medium text-zinc-500">
+      <div className="w-[4.25rem] shrink-0 text-sm font-semibold text-[var(--accent-hot)]">
         {task.scheduled_start ? formatTime(task.scheduled_start) : '—'}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-zinc-900">{task.title}</p>
-        <p className="text-sm text-zinc-500">
+        <p className="font-medium text-[var(--ink)]">{task.title}</p>
+        <p className="mt-0.5 text-sm text-[var(--ink-muted)]">
           {task.duration_minutes} min
           {task.scheduled_end ? ` · ends ${formatTime(task.scheduled_end)}` : ''}
         </p>
       </div>
-      <span
-        className={`shrink-0 self-start rounded-full px-2.5 py-0.5 text-xs font-medium ${
-          isFixed
-            ? 'bg-zinc-200 text-zinc-700'
-            : 'bg-blue-100 text-blue-700'
-        }`}
-      >
+      <span className={`badge shrink-0 self-start ${isFixed ? 'badge-muted' : 'badge-accent'}`}>
         {badgeForTask(task)}
       </span>
     </li>
@@ -62,9 +54,9 @@ export function DayView({ scheduled, unscheduled }: DayViewProps) {
 
   if (!hasSchedule && !hasUnscheduled) {
     return (
-      <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-8 text-center">
-        <p className="text-zinc-600">Your day is empty.</p>
-        <p className="mt-2 text-sm text-zinc-500">
+      <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-black/20 p-8 text-center">
+        <p className="text-[var(--ink)]">Your day is empty.</p>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
           Connect Google Calendar or add tasks to build your schedule.
         </p>
       </div>
@@ -74,36 +66,36 @@ export function DayView({ scheduled, unscheduled }: DayViewProps) {
   return (
     <div className="space-y-6">
       {hasSchedule ? (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5" aria-label="Scheduled tasks for today">
           {scheduled.map((task) => (
             <ScheduleRow key={task.id} task={task} />
           ))}
         </ul>
       ) : (
-        <p className="rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600">
-          No timed slots yet — add fixed tasks or sync your calendar.
+        <p className="alert alert-info">
+          No timed slots yet — add fixed tasks or connect your calendar.
         </p>
       )}
 
       {hasUnscheduled && (
         <section>
-          <h3 className="mb-2 text-sm font-semibold text-amber-800">Couldn&apos;t schedule</h3>
-          <ul className="space-y-2">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--warn)]">
+            Couldn&apos;t schedule
+          </h3>
+          <ul className="space-y-2.5">
             {unscheduled.map((task) => (
               <li
                 key={task.id}
-                className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
+                className="flex items-center justify-between rounded-2xl border border-[rgba(232,192,106,0.28)] bg-[var(--warn-soft)] px-4 py-3"
               >
                 <div>
-                  <p className="font-medium text-zinc-900">{task.title}</p>
-                  <p className="text-sm text-zinc-500">
+                  <p className="font-medium text-[var(--ink)]">{task.title}</p>
+                  <p className="text-sm text-[var(--ink-muted)]">
                     {task.duration_minutes} min · Priority {task.priority ?? '—'}
-                    {task.deadline
-                      ? ` · Due ${formatTime(task.deadline)}`
-                      : ''}
+                    {task.deadline ? ` · Due ${formatTime(task.deadline)}` : ''}
                   </p>
                 </div>
-                <span className="text-xs font-medium text-amber-700">No slot</span>
+                <span className="badge badge-muted text-[var(--warn)]">No slot</span>
               </li>
             ))}
           </ul>

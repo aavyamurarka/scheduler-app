@@ -51,41 +51,65 @@ export default async function Home() {
   const { scheduled, unscheduled } = partitionDayView(tasks, bounds);
 
   return (
-    <div className="min-h-full bg-zinc-50">
+    <div className="relative min-h-full overflow-hidden">
+      <div
+        className="ambient-orb -right-16 top-10 h-56 w-56 bg-[radial-gradient(circle,rgba(224,138,79,0.35),transparent_70%)]"
+        aria-hidden
+      />
+      <div
+        className="ambient-orb -left-20 bottom-24 h-64 w-64 bg-[radial-gradient(circle,rgba(90,140,180,0.22),transparent_70%)]"
+        aria-hidden
+      />
+
       <AutoScheduleRefresher isCalendarConnected={Boolean(calendarConnection)} />
       <RealtimeScheduleRefresher userId={user.id} />
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+
+      <header className="sticky top-0 z-20 px-4 pb-2 pt-4 sm:px-6">
+        <div className="nav-pill mx-auto flex max-w-3xl items-center justify-between rounded-full px-4 py-3 sm:px-5">
           <div>
-            <h1 className="text-lg font-semibold text-zinc-900">Scheduler</h1>
-            <p className="text-sm text-zinc-500">Today</p>
+            <h1 className="font-display text-xl font-semibold tracking-tight text-[var(--ink)] sm:text-2xl">
+              Scheduler
+            </h1>
+            <p className="text-xs text-[var(--ink-muted)] sm:text-sm">Today, already arranged</p>
           </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/preferences"
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              Edit preferences
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/preferences" className="btn-ghost text-sm">
+              Preferences
             </Link>
             <SignOutButton />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-8 px-4 py-8">
-        <GoogleCalendarPanel
-          isConnected={Boolean(calendarConnection)}
-          lastSyncedAt={calendarConnection?.updated_at ?? null}
-        />
+      <main className="relative z-10 mx-auto max-w-3xl space-y-5 px-4 py-6 sm:space-y-6 sm:px-6 sm:py-8">
+        <div className="animate-rise">
+          <GoogleCalendarPanel
+            isConnected={Boolean(calendarConnection)}
+            lastSyncedAt={calendarConnection?.updated_at ?? null}
+          />
+        </div>
 
-        <PushNotificationsPanel />
+        <div className="animate-rise animate-rise-delay-1">
+          <PushNotificationsPanel />
+        </div>
 
-        <section>
-          <h2 className="mb-3 text-base font-semibold text-zinc-900">Today&apos;s schedule</h2>
+        <section className="animate-rise animate-rise-delay-2 glass bubble-lg p-4 sm:p-6">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-[var(--ink)] sm:text-xl">
+                Today&apos;s schedule
+              </h2>
+              <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                Flexible tasks fill the gaps around your fixed blocks.
+              </p>
+            </div>
+          </div>
           <DayView scheduled={scheduled} unscheduled={unscheduled} />
         </section>
 
-        <TaskInput />
+        <div className="animate-rise animate-rise-delay-3">
+          <TaskInput />
+        </div>
       </main>
     </div>
   );

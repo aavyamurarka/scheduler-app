@@ -27,7 +27,7 @@ function CalendarStatusBanner() {
 
   if (status === 'connected') {
     return (
-      <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+      <p className="alert alert-ok mb-4" role="status">
         Google Calendar connected. Today&apos;s events were imported.
       </p>
     );
@@ -35,7 +35,7 @@ function CalendarStatusBanner() {
 
   if (status === 'error') {
     return (
-      <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+      <p className="alert alert-error mb-4" role="alert">
         Calendar error: {message ?? 'Something went wrong'}
       </p>
     );
@@ -58,39 +58,36 @@ export function GoogleCalendarPanel({
     : null;
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-6">
+    <section className="glass bubble-lg p-4 sm:p-6">
       <Suspense fallback={null}>
         <CalendarStatusBanner />
       </Suspense>
 
-      <div className="mt-0 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900">Google Calendar</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h2 className="font-display text-lg font-semibold text-[var(--ink)]">
+            Google Calendar
+          </h2>
+          <p className="mt-1 text-sm text-[var(--ink-muted)]">
             {isConnected
               ? 'Synced automatically while you use the app. Yesterday’s events drop off each new day.'
               : 'Connect to pull classes and meetings into your schedule.'}
           </p>
           {isConnected && lastSyncedLabel && (
-            <p className="mt-1 text-xs text-zinc-400">Last synced: {lastSyncedLabel}</p>
+            <p className="mt-2 text-xs text-[var(--ink-faint)]">
+              Last synced: {lastSyncedLabel}
+            </p>
           )}
         </div>
 
-        {!isConnected && (
-          <div className="flex flex-wrap gap-2">
-            <a
-              href="/api/google-calendar/connect"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Connect Google Calendar
-            </a>
-          </div>
+        {!isConnected ? (
+          <a href="/api/google-calendar/connect" className="btn-primary shrink-0 text-sm">
+            Connect Google Calendar
+          </a>
+        ) : (
+          <span className="badge badge-accent self-start sm:self-center">Live</span>
         )}
       </div>
-
-      <p className="mt-3 text-xs text-zinc-400">
-        Setup guide: <code className="text-zinc-500">docs/google-calendar-setup.md</code>
-      </p>
     </section>
   );
 }
