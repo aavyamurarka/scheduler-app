@@ -75,79 +75,109 @@ function authDebug(request: NextRequest) {
 }
 
 async function runNotifications() {
-  const onesignalAppId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
-  const onesignalApiKey = process.env.ONESIGNAL_REST_API_KEY;
+  try {
+    const onesignalAppId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
+    const onesignalApiKey = process.env.ONESIGNAL_REST_API_KEY;
 
-  if (!onesignalAppId || !onesignalApiKey) {
-    return NextResponse.json(
-      { ok: false, error: 'Missing OneSignal env vars.' },
-      { status: 500 }
-    );
-  }
-
-  const supabase = createAdminClient();
-
-  const now = new Date();
-  const windowEnd = new Date(now.getTime() + 15 * 60 * 1000);
-
-  const { data: tasks, error: tasksError } = await supabase
-    .from('tasks')
-    .select('id,user_id,title,scheduled_start')
-    .is('pre_task_notified_at', null)
-    .neq('status', 'completed')
-    .gte('scheduled_start', now.toISOString())
-    .lt('scheduled_start', windowEnd.toISOString());
-
-  if (tasksError) {
-    return NextResponse.json({ ok: false, error: tasksError.message }, { status: 500 });
-  }
-
-  const dueTasks = (tasks ?? []) as TaskRow[];
-  if (dueTasks.length === 0) {
-    return NextResponse.json({ ok: true, notified: 0 });
-  }
-
-  let notified = 0;
-  const taskIdsNotified: string[] = [];
-
-  for (const task of dueTasks) {
-    const { data: subs, error: subsError } = await supabase
-      .from('push_subscriptions')
-      .select('onesignal_subscription_id')
-      .eq('user_id', task.user_id);
-
-    if (subsError) {
-      continue;
+    if (!onesignalAppId || !onesignalApiKey) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Missing OneSignal env vars.',
+          hasOneSignalAppId: Boolean(onesignalAppId),
+          hasOneSignalRestApiKey: Boolean(onesignalApiKey),
+        },
+        { status: 500 }
+      );
     }
 
-    const subscriptionIds = ((subs ?? []) as PushSubscriptionRow[])
-      .map((s) => s.onesignal_subscription_id)
-      .filter(Boolean);
-
-    if (subscriptionIds.length === 0) {
-      continue;
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Missing SUPABASE_SERVICE_ROLE_KEY in Vercel env vars.',
+        },
+        { status: 500 }
+      );
     }
 
-    await sendOneSignalPush({
-      appId: onesignalAppId,
-      apiKey: onesignalApiKey,
-      subscriptionIds,
-      title: 'Up next',
-      message: task.title,
-    });
+    const supabase = createAdminClient();
 
-    taskIdsNotified.push(task.id);
-    notified += 1;
-  }
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + 15 * 60 * 1000);
 
-  if (taskIdsNotified.length > 0) {
-    await supabase
+    const { data: tasks, error: tasksError } = await supabase
       .from('tasks')
-      .update({ pre_task_notified_at: now.toISOString() })
-      .in('id', taskIdsNotified);
-  }
+      .select('id,user_id,title,scheduled_start')
+      .is('pre_task_notified_at', null)
+      .neq('status', 'completed')
+      .gte('scheduled_start', now.toISOString())
+      .lt('scheduled_start', windowEnd.toISOString());
 
-  return NextResponse.json({ ok: true, notified });
+    if (tasksError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: tasksError.message,
+          hint:
+            tasksError.message.includes('pre_task_notified_at')
+              ? 'Run supabase/migrations/005_pre_task_notified_at.sql in Supabase SQL Editor.'
+              : undefined,
+        },
+        { status: 500 }
+      );
+    }
+
+    const dueTasks = (tasks ?? []) as TaskRow[];
+    if (dueTasks.length === 0) {
+      return NextResponse.json({ ok: true, notified: 0 });
+    }
+
+    let notified = 0;
+    const taskIdsNotified: string[] = [];
+
+    for (const task of dueTasks) {
+      const { data: subs, error: subsError } = await supabase
+        .from('push_subscriptions')
+        .select('onesignal_subscription_id')
+        .eq('user_id', task.user_id);
+
+      if (subsError) {
+        continue;
+      }
+
+      const subscriptionIds = ((subs ?? []) as PushSubscriptionRow[])
+        .map((s) => s.onesignal_subscription_id)
+        .filter(Boolean);
+
+      if (subscriptionIds.length === 0) {
+        continue;
+      }
+
+      await sendOneSignalPush({
+        appId: onesignalAppId,
+        apiKey: onesignalApiKey,
+        subscriptionIds,
+        title: 'Up next',
+        message: task.title,
+      });
+
+      taskIdsNotified.push(task.id);
+      notified += 1;
+    }
+
+    if (taskIdsNotified.length > 0) {
+      await supabase
+        .from('tasks')
+        .update({ pre_task_notified_at: now.toISOString() })
+        .in('id', taskIdsNotified);
+    }
+
+    return NextResponse.json({ ok: true, notified });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
 
 function unauthorizedResponse(request: NextRequest) {
