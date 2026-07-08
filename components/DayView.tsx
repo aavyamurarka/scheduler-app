@@ -27,7 +27,7 @@ function ScheduleRow({ task }: { task: Task }) {
 
   return (
     <li
-      className={`flex gap-3 rounded-2xl px-4 py-3.5 ${
+      className={`flex gap-3 rounded-xl px-4 py-3.5 ${
         isFixed ? 'row-glass' : 'row-accent'
       }`}
     >
@@ -54,7 +54,7 @@ export function DayView({ scheduled, unscheduled }: DayViewProps) {
 
   if (!hasSchedule && !hasUnscheduled) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--glass-border)] bg-black/20 p-8 text-center">
+      <div className="rounded-xl border border-dashed border-[var(--glass-border)] bg-white/35 p-8 text-center">
         <p className="text-[var(--ink)]">Your day is empty.</p>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           Connect Google Calendar or add tasks to build your schedule.
@@ -86,7 +86,7 @@ export function DayView({ scheduled, unscheduled }: DayViewProps) {
             {unscheduled.map((task) => (
               <li
                 key={task.id}
-                className="flex items-center justify-between rounded-2xl border border-[rgba(232,192,106,0.28)] bg-[var(--warn-soft)] px-4 py-3"
+                className="flex items-center justify-between rounded-xl border border-[rgba(154,122,48,0.28)] bg-[var(--warn-soft)] px-4 py-3"
               >
                 <div>
                   <p className="font-medium text-[var(--ink)]">{task.title}</p>

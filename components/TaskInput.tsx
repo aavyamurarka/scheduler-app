@@ -48,8 +48,8 @@ export function TaskInput() {
   const isFixed = taskType === 'fixed';
 
   return (
-    <section className="glass bubble-lg p-4 sm:p-6">
-      <h2 className="font-display text-lg font-semibold text-[var(--ink)]">Add a task</h2>
+    <section className="glass bubble-lg p-5 sm:p-6">
+      <h2 className="font-display text-xl font-semibold text-[var(--ink)]">Add a task</h2>
       <p className="mt-1 text-sm text-[var(--ink-muted)]">
         Fixed = set time. Flexible = auto-placed around your day.
       </p>

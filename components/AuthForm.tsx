@@ -79,7 +79,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   return (
     <div className="glass-strong bubble-lg w-full max-w-md p-6 sm:p-8">
       <div className="mb-8 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-hot)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-hot)]">
           Scheduler
         </p>
         <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight text-[var(--ink)]">

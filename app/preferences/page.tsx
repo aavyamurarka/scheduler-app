@@ -22,11 +22,7 @@ export default async function PreferencesPage() {
   }
 
   return (
-    <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden px-4 py-12">
-      <div
-        className="ambient-orb -left-8 bottom-16 h-48 w-48 bg-[radial-gradient(circle,rgba(90,140,180,0.22),transparent_70%)]"
-        aria-hidden
-      />
+    <div className="flex min-h-full flex-1 items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <PreferencesForm
           mode="edit"

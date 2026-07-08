@@ -21,11 +21,7 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden px-4 py-12">
-      <div
-        className="ambient-orb right-0 top-20 h-56 w-56 bg-[radial-gradient(circle,rgba(224,138,79,0.35),transparent_70%)]"
-        aria-hidden
-      />
+    <div className="flex min-h-full flex-1 items-center justify-center px-4 py-12">
       <OnboardingForm />
     </div>
   );

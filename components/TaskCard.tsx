@@ -36,7 +36,7 @@ export function TaskCard({ task }: TaskCardProps) {
       : 'Flexible';
 
   return (
-    <li className={`flex items-center gap-3 rounded-2xl px-4 py-3 ${isFixed ? 'row-glass' : 'row-accent'}`}>
+    <li className={`flex items-center gap-3 rounded-xl px-4 py-3 ${isFixed ? 'row-glass' : 'row-accent'}`}>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-[var(--ink)]">{task.title}</p>
         <p className="text-sm text-[var(--ink-muted)]">{subtitle}</p>
