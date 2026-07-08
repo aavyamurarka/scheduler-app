@@ -90,6 +90,28 @@ export function wallClockInZoneToDate(
   return new Date(ms);
 }
 
+/** Midnight → next midnight in the user's timezone (for calendar import day). */
+export function getCalendarDayBounds(
+  timeZone: string,
+  referenceDate: Date = new Date()
+): DayBounds {
+  const { year, month, day } = getTodayDateParts(timeZone, referenceDate);
+  const dayStart = wallClockInZoneToDate(year, month, day, 0, 0, timeZone);
+
+  // Calendar-day arithmetic in UTC date parts (safe for month/year rollover).
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  const dayEnd = wallClockInZoneToDate(
+    next.getUTCFullYear(),
+    next.getUTCMonth() + 1,
+    next.getUTCDate(),
+    0,
+    0,
+    timeZone
+  );
+
+  return { dayStart, dayEnd };
+}
+
 export function getDayBoundsFromPreferences(
   preferences: UserPreferences,
   referenceDate: Date = new Date()

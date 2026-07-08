@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
+import { AutoScheduleRefresher } from '@/components/AutoScheduleRefresher';
 import { GoogleCalendarPanel } from '@/components/GoogleCalendarPanel';
 import { PushNotificationsPanel } from '@/components/PushNotificationsPanel';
 import { DayView } from '@/components/DayView';
@@ -33,7 +34,7 @@ export default async function Home() {
   const calendarConnection = await getCalendarConnection(supabase, user.id);
 
   if (calendarConnection) {
-    // Best-effort auto-sync: never block the page if Google is down or tokens expire.
+    // Best-effort auto-sync on every page load; never block the page if Google is down.
     try {
       await syncGoogleCalendarEvents(supabase, user.id);
     } catch (err) {
@@ -51,6 +52,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-full bg-zinc-50">
+      <AutoScheduleRefresher isCalendarConnected={Boolean(calendarConnection)} />
       <RealtimeScheduleRefresher userId={user.id} />
       <header className="border-b border-zinc-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">

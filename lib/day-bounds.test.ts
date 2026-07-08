@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDayBoundsFromPreferences } from '@/lib/day-bounds';
+import { getCalendarDayBounds, getDayBoundsFromPreferences } from '@/lib/day-bounds';
 import type { UserPreferences } from '@/lib/types';
+
+describe('getCalendarDayBounds', () => {
+  it('returns midnight-to-midnight in the given timezone', () => {
+    const referenceDate = new Date('2026-07-08T12:00:00.000Z');
+    const { dayStart, dayEnd } = getCalendarDayBounds('UTC', referenceDate);
+
+    expect(dayStart.toISOString()).toBe('2026-07-08T00:00:00.000Z');
+    expect(dayEnd.toISOString()).toBe('2026-07-09T00:00:00.000Z');
+  });
+});
 
 describe('getDayBoundsFromPreferences', () => {
   it('builds a scheduling window from wake and sleep times', () => {

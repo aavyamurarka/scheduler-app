@@ -93,16 +93,11 @@ export type GoogleCalendarEvent = {
   end?: { dateTime?: string; date?: string };
 };
 
-export function getTodayBounds(): { timeMin: string; timeMax: string } {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
-}
-
-export async function fetchTodaysEvents(accessToken: string): Promise<GoogleCalendarEvent[]> {
-  const { timeMin, timeMax } = getTodayBounds();
+export async function fetchTodaysEvents(
+  accessToken: string,
+  timeMin: string,
+  timeMax: string
+): Promise<GoogleCalendarEvent[]> {
   const params = new URLSearchParams({
     timeMin,
     timeMax,

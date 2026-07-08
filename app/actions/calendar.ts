@@ -8,7 +8,13 @@ import { runDayScheduleWithNotices, type ReshuffleNotice } from '@/lib/schedule-
 import { createClient } from '@/lib/supabase/server';
 
 export type SyncCalendarResult =
-  | { success: true; imported: number; skipped: number; notices?: ReshuffleNotice[] }
+  | {
+      success: true;
+      imported: number;
+      skipped: number;
+      cleaned: number;
+      notices?: ReshuffleNotice[];
+    }
   | { success: false; error: string };
 
 export async function syncGoogleCalendarAction(): Promise<SyncCalendarResult> {
@@ -22,15 +28,18 @@ export async function syncGoogleCalendarAction(): Promise<SyncCalendarResult> {
   }
 
   try {
-    const { imported, skipped } = await syncGoogleCalendarEvents(supabase, user.id);
+    const { imported, skipped, cleaned } = await syncGoogleCalendarEvents(
+      supabase,
+      user.id
+    );
     const preferences = await getUserPreferences(supabase, user.id);
     if (preferences) {
       const { notices } = await runDayScheduleWithNotices(supabase, user.id);
       revalidatePath('/');
-      return { success: true, imported, skipped, notices };
+      return { success: true, imported, skipped, cleaned, notices };
     }
     revalidatePath('/');
-    return { success: true, imported, skipped };
+    return { success: true, imported, skipped, cleaned };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Calendar sync failed.';
     return { success: false, error: message };

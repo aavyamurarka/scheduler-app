@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { getCalendarDayBounds } from '@/lib/day-bounds';
 import {
   eventDurationMinutes,
   fetchTodaysEvents,
   refreshAccessToken,
 } from '@/lib/google-calendar';
+import { getUserPreferences } from '@/lib/preferences';
 import type { GoogleCalendarTokens } from '@/lib/types';
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -80,12 +82,21 @@ export async function getValidAccessToken(
 export async function syncGoogleCalendarEvents(
   supabase: SupabaseClient,
   userId: string
-): Promise<{ imported: number; skipped: number }> {
+): Promise<{ imported: number; skipped: number; cleaned: number }> {
+  const preferences = await getUserPreferences(supabase, userId);
+  const timeZone = preferences?.timezone ?? 'UTC';
+  const { dayStart, dayEnd } = getCalendarDayBounds(timeZone);
+
   const accessToken = await getValidAccessToken(supabase, userId);
-  const events = await fetchTodaysEvents(accessToken);
+  const events = await fetchTodaysEvents(
+    accessToken,
+    dayStart.toISOString(),
+    dayEnd.toISOString()
+  );
 
   let imported = 0;
   let skipped = 0;
+  const importedEventIds: string[] = [];
 
   for (const event of events) {
     const start = event.start?.dateTime;
@@ -116,7 +127,53 @@ export async function syncGoogleCalendarEvents(
       throw error;
     }
 
+    importedEventIds.push(event.id);
     imported += 1;
+  }
+
+  // Remove Google-imported tasks outside today's calendar day (in user timezone).
+  const { data: staleOutside, error: staleOutsideError } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('user_id', userId)
+    .not('google_event_id', 'is', null)
+    .or(`scheduled_start.lt.${dayStart.toISOString()},scheduled_start.gte.${dayEnd.toISOString()}`)
+    .select('id');
+
+  if (staleOutsideError) {
+    throw staleOutsideError;
+  }
+
+  // Remove today's Google tasks that were cancelled / no longer returned by Google.
+  let cleanedToday = 0;
+  const { data: todaysGoogleTasks, error: todayQueryError } = await supabase
+    .from('tasks')
+    .select('id,google_event_id')
+    .eq('user_id', userId)
+    .not('google_event_id', 'is', null)
+    .gte('scheduled_start', dayStart.toISOString())
+    .lt('scheduled_start', dayEnd.toISOString());
+
+  if (todayQueryError) {
+    throw todayQueryError;
+  }
+
+  const keep = new Set(importedEventIds);
+  const toDelete = (todaysGoogleTasks ?? [])
+    .filter((task) => task.google_event_id && !keep.has(task.google_event_id))
+    .map((task) => task.id);
+
+  if (toDelete.length > 0) {
+    const { error: deleteTodayError } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('user_id', userId)
+      .in('id', toDelete);
+
+    if (deleteTodayError) {
+      throw deleteTodayError;
+    }
+    cleanedToday = toDelete.length;
   }
 
   await supabase
@@ -124,5 +181,9 @@ export async function syncGoogleCalendarEvents(
     .update({ updated_at: new Date().toISOString() })
     .eq('user_id', userId);
 
-  return { imported, skipped };
+  return {
+    imported,
+    skipped,
+    cleaned: (staleOutside?.length ?? 0) + cleanedToday,
+  };
 }
