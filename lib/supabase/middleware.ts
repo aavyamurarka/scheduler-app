@@ -3,7 +3,17 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/signup', '/auth'];
 
+/** Static assets that must be reachable without a session (e.g. push service workers). */
+const PUBLIC_ASSET_PATHS = [
+  '/OneSignalSDKWorker.js',
+  '/OneSignalSDKUpdaterWorker.js',
+];
+
 function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_ASSET_PATHS.includes(pathname)) {
+    return true;
+  }
+
   return PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
