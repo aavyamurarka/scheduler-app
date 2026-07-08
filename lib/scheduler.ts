@@ -170,9 +170,21 @@ export function scheduleDay(
   fixedTasks: SchedulerFixedTask[],
   flexibleTasks: SchedulerFlexibleTask[],
   dayStart: Date,
-  dayEnd: Date
+  dayEnd: Date,
+  /** Earliest moment flexible tasks may start (defaults to dayStart). Use "now" mid-day. */
+  scheduleFrom: Date = dayStart
 ): ScheduleDayResult {
-  const gaps = computeFreeGaps(fixedTasks, dayStart, dayEnd);
+  const effectiveStart =
+    scheduleFrom.getTime() > dayStart.getTime() ? scheduleFrom : dayStart;
+
+  if (effectiveStart >= dayEnd) {
+    return {
+      scheduled: [],
+      unscheduled: flexibleTasks.map((task) => task.id),
+    };
+  }
+
+  const gaps = computeFreeGaps(fixedTasks, effectiveStart, dayEnd);
   const sortedFlexible = sortFlexibleTasks(flexibleTasks);
 
   const scheduled: ScheduledAssignment[] = [];

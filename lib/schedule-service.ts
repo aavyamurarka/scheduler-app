@@ -59,7 +59,8 @@ export async function getSchedulableTasks(
 
 export function partitionDayView(
   tasks: Task[],
-  bounds: DayBounds
+  bounds: DayBounds,
+  now: Date = new Date()
 ): {
   scheduled: Task[];
   unscheduled: Task[];
@@ -71,7 +72,9 @@ export function partitionDayView(
       (task) =>
         task.scheduled_start &&
         task.scheduled_end &&
-        isTaskScheduledToday(task, dayStart, dayEnd)
+        isTaskScheduledToday(task, dayStart, dayEnd) &&
+        // Hide slots that already ended — schedule should show what's left today.
+        new Date(task.scheduled_end) > now
     )
     .sort(
       (a, b) =>
@@ -119,7 +122,8 @@ export async function runDaySchedule(
       deadline: task.deadline,
     }));
 
-  const result = scheduleDay(fixedTasks, flexibleTasks, dayStart, dayEnd);
+  const scheduleFrom = new Date();
+  const result = scheduleDay(fixedTasks, flexibleTasks, dayStart, dayEnd, scheduleFrom);
 
   const unscheduledIds = new Set(result.unscheduled);
 
@@ -235,7 +239,8 @@ export async function runDayScheduleWithNotices(
       deadline: task.deadline,
     }));
 
-  const result = scheduleDay(fixedTasks, flexibleTasks, dayStart, dayEnd);
+  const scheduleFrom = new Date();
+  const result = scheduleDay(fixedTasks, flexibleTasks, dayStart, dayEnd, scheduleFrom);
 
   const changes = compareSchedules(before, result.scheduled);
   const notices = toReshuffleNotices(changes, tasks);

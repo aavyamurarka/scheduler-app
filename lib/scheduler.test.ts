@@ -162,6 +162,17 @@ describe('scheduleDay', () => {
 
     expect(result.scheduled.every((task) => task.id !== 'class')).toBe(true);
   });
+
+  it('does not place flexible tasks before scheduleFrom (e.g. mid-day now)', () => {
+    const flexible: SchedulerFlexibleTask[] = [
+      { id: 'later', duration_minutes: 30, priority: 1, deadline: null },
+    ];
+
+    const result = scheduleDay([], flexible, dayStart, dayEnd, at(DAY, 15));
+
+    expect(result.unscheduled).toEqual([]);
+    expect(new Date(result.scheduled[0].scheduled_start)).toEqual(at(DAY, 15));
+  });
 });
 
 describe('compareSchedules', () => {
