@@ -52,6 +52,7 @@ export async function createTask(
     title,
     task_type: task.task_type,
     duration_minutes: task.duration_minutes,
+    manual_lock: false,
   };
 
   if (task.task_type === 'fixed') {

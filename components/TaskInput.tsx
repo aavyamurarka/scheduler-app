@@ -19,7 +19,7 @@ function defaultDateTimeLocal(): string {
   return local.toISOString().slice(0, 16);
 }
 
-const labelClass = 'mb-1.5 block text-sm font-medium text-[var(--ink-muted)]';
+const labelClass = 'mb-1 block text-xs font-medium text-[var(--ink-muted)]';
 
 export function TaskInput() {
   const formRef = useRef<HTMLFormElement>(null);
@@ -48,9 +48,9 @@ export function TaskInput() {
   const isFixed = taskType === 'fixed';
 
   return (
-    <section className="glass bubble-lg p-5 sm:p-6">
-      <h2 className="font-display text-xl font-semibold text-[var(--ink)]">Add a task</h2>
-      <p className="mt-1 text-sm text-[var(--ink-muted)]">
+    <section className="glass bubble-lg p-4 sm:p-5">
+      <h2 className="font-display text-base font-semibold text-[var(--ink)]">Add a task</h2>
+      <p className="mt-1 text-xs text-[var(--ink-muted)]">
         Fixed = set time. Flexible = auto-placed around your day.
       </p>
 

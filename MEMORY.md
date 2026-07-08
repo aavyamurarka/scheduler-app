@@ -23,6 +23,7 @@ DO NOT delete historical context if it is still relevant. Compress older complet
 - 2026-07-08 — **Pre-task push via external cron** — Hobby Vercel can't do 1-min cron; `/api/notifications/run` + cron-job.org (https + `?secret=`)
 - 2026-07-08 — **Calendar auto-sync** — timezone-aware day import, cleanup of yesterday's Google tasks, refresh on open/focus (no Sync button)
 - 2026-07-08 — **UX direction** — sage→cream web app layout (schedule left / task input right); quieter translucent cards; browser auto-prompts for notifications; calendar sync stays in header
+- 2026-07-08 — **Manual override** — `tasks.manual_lock`; DayTimeline hour grid with free gaps; drag flexible tasks (15m snap); locked tasks treated as fixed by auto-scheduler
 
 ## 🐛 Known Issues & Quirks
 *(Log current bugs or weird workarounds here)*

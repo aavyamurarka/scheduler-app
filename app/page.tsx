@@ -3,14 +3,14 @@ import Link from 'next/link';
 
 import { AutoEnableNotifications } from '@/components/AutoEnableNotifications';
 import { AutoScheduleRefresher } from '@/components/AutoScheduleRefresher';
-import { DayView } from '@/components/DayView';
+import { DayTimeline } from '@/components/DayTimeline';
 import { RealtimeScheduleRefresher } from '@/components/RealtimeScheduleRefresher';
 import { TaskInput } from '@/components/TaskInput';
 import { SignOutButton } from '@/components/SignOutButton';
 import { getDayBoundsFromPreferences } from '@/lib/day-bounds';
 import { getCalendarConnection, syncGoogleCalendarEvents } from '@/lib/calendar-sync';
 import { getUserPreferences } from '@/lib/preferences';
-import { partitionDayView, runDaySchedule } from '@/lib/schedule-service';
+import { runDaySchedule } from '@/lib/schedule-service';
 import { createClient } from '@/lib/supabase/server';
 import { getTasks } from '@/lib/tasks';
 
@@ -44,7 +44,6 @@ export default async function Home() {
 
   const bounds = getDayBoundsFromPreferences(preferences);
   const tasks = await getTasks(supabase, user.id);
-  const { scheduled, unscheduled } = partitionDayView(tasks, bounds);
   const syncLabel = calendarConnection?.updated_at
     ? new Date(calendarConnection.updated_at).toLocaleString(undefined, {
         month: 'short',
@@ -60,13 +59,13 @@ export default async function Home() {
       <RealtimeScheduleRefresher userId={user.id} />
       <AutoEnableNotifications />
 
-      <header className="sticky top-0 z-20 border-b border-[var(--glass-border)] bg-[rgba(247,243,234,0.72)] px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+      <header className="sticky top-0 z-20 border-b border-[var(--glass-border)] bg-[rgba(247,243,234,0.78)] px-3 py-2.5 backdrop-blur-md sm:px-4 lg:px-5">
+        <div className="mx-auto flex w-full max-w-[88rem] items-center justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-[var(--ink)]">
+            <h1 className="font-display text-lg font-semibold tracking-tight text-[var(--ink)] sm:text-xl">
               Scheduler
             </h1>
-            <p className="text-sm text-[var(--ink-muted)]">
+            <p className="text-xs text-[var(--ink-muted)]">
               Today
               {calendarConnection
                 ? syncLabel
@@ -77,11 +76,11 @@ export default async function Home() {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {!calendarConnection ? (
-              <a href="/api/google-calendar/connect" className="btn-primary text-sm">
+              <a href="/api/google-calendar/connect" className="btn-primary text-xs">
                 Connect calendar
               </a>
             ) : null}
-            <Link href="/preferences" className="btn-ghost text-sm">
+            <Link href="/preferences" className="btn-ghost text-xs">
               Preferences
             </Link>
             <SignOutButton />
@@ -89,20 +88,24 @@ export default async function Home() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.9fr)] lg:gap-6 lg:px-8 lg:py-8">
-        <section className="animate-rise glass bubble-lg min-h-[28rem] p-5 sm:p-6">
-          <div className="mb-5">
-            <h2 className="font-display text-xl font-semibold text-[var(--ink)]">
-              Today&apos;s schedule
+      <main className="mx-auto grid w-full max-w-[88rem] gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,22rem)] lg:gap-5 lg:px-5 lg:py-5">
+        <section className="animate-rise glass bubble-lg min-h-[32rem] p-3 sm:p-4">
+          <div className="mb-3">
+            <h2 className="font-display text-base font-semibold text-[var(--ink)] sm:text-lg">
+              Today&apos;s calendar
             </h2>
-            <p className="mt-1 text-sm text-[var(--ink-muted)]">
-              Flexible tasks fill gaps around your fixed commitments.
+            <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
+              Free gaps are marked. Drag flexible tasks to pin a slot.
             </p>
           </div>
-          <DayView scheduled={scheduled} unscheduled={unscheduled} />
+          <DayTimeline
+            tasks={tasks}
+            dayStartIso={bounds.dayStart.toISOString()}
+            dayEndIso={bounds.dayEnd.toISOString()}
+          />
         </section>
 
-        <aside className="animate-rise animate-rise-delay-1 lg:sticky lg:top-24 lg:self-start">
+        <aside className="animate-rise animate-rise-delay-1 lg:sticky lg:top-16 lg:self-start">
           <TaskInput />
         </aside>
       </main>

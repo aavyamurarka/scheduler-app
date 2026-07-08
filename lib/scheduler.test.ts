@@ -173,6 +173,27 @@ describe('scheduleDay', () => {
     expect(result.unscheduled).toEqual([]);
     expect(new Date(result.scheduled[0].scheduled_start)).toEqual(at(DAY, 15));
   });
+
+  it('leaves gaps carved by locked blocker tasks for free placement', () => {
+    const blockers: SchedulerFixedTask[] = [
+      {
+        id: 'locked-flexible',
+        scheduled_start: iso(DAY, 10),
+        scheduled_end: iso(DAY, 11),
+      },
+    ];
+    const flexible: SchedulerFlexibleTask[] = [
+      { id: 'after', duration_minutes: 30, priority: 1, deadline: null },
+    ];
+
+    const result = scheduleDay(blockers, flexible, dayStart, dayEnd, at(DAY, 8));
+    expect(result.unscheduled).toEqual([]);
+    expect(new Date(result.scheduled[0].scheduled_start)).toEqual(at(DAY, 8));
+    expect(new Date(result.scheduled[0].scheduled_end)).toEqual(at(DAY, 8, 30));
+
+    const later = scheduleDay(blockers, flexible, dayStart, dayEnd, at(DAY, 10, 30));
+    expect(new Date(later.scheduled[0].scheduled_start)).toEqual(at(DAY, 11));
+  });
 });
 
 describe('compareSchedules', () => {

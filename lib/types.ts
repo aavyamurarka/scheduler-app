@@ -15,6 +15,8 @@ export type Task = {
   status: TaskStatus;
   created_at: string;
   google_event_id: string | null;
+  /** When true, flexible task times are user-pinned and ignored by auto-schedule. */
+  manual_lock: boolean;
 };
 
 export type NewTask = {

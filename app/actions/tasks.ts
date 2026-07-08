@@ -4,11 +4,23 @@ import { revalidatePath } from 'next/cache';
 
 import { createClient } from '@/lib/supabase/server';
 import { createTask } from '@/lib/tasks';
-import { runDayScheduleWithNotices, type ReshuffleNotice } from '@/lib/schedule-service';
+import { getDayBoundsFromPreferences } from '@/lib/day-bounds';
+import {
+  getSchedulableTasks,
+  requireUserPreferences,
+  runDayScheduleWithNotices,
+  snapToFifteenMinutes,
+  validateFlexiblePlacement,
+  type ReshuffleNotice,
+} from '@/lib/schedule-service';
 import type { TaskType } from '@/lib/types';
 
 export type CreateTaskResult =
   | { success: true; notices?: ReshuffleNotice[] }
+  | { success: false; error: string };
+
+export type MoveTaskResult =
+  | { success: true }
   | { success: false; error: string };
 
 function parseOptionalString(value: FormDataEntryValue | null): string | undefined {
@@ -77,6 +89,98 @@ export async function createTaskAction(
     return { success: true, notices };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to add task.';
+    return { success: false, error: message };
+  }
+}
+
+export async function moveFlexibleTaskAction(args: {
+  taskId: string;
+  scheduledStartIso: string;
+}): Promise<MoveTaskResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: 'You must be signed in.' };
+  }
+
+  const proposedStart = new Date(args.scheduledStartIso);
+  if (Number.isNaN(proposedStart.getTime())) {
+    return { success: false, error: 'Invalid start time.' };
+  }
+
+  try {
+    const preferences = await requireUserPreferences(supabase, user.id);
+    const bounds = getDayBoundsFromPreferences(preferences);
+    const tasks = await getSchedulableTasks(supabase, user.id, bounds);
+
+    const validation = validateFlexiblePlacement({
+      tasks,
+      taskId: args.taskId,
+      proposedStart,
+      dayStart: bounds.dayStart,
+      dayEnd: bounds.dayEnd,
+    });
+
+    if (!validation.ok) {
+      return { success: false, error: validation.error };
+    }
+
+    const start = snapToFifteenMinutes(proposedStart);
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        scheduled_start: start.toISOString(),
+        scheduled_end: validation.end.toISOString(),
+        status: 'scheduled',
+        manual_lock: true,
+      })
+      .eq('id', args.taskId)
+      .eq('user_id', user.id)
+      .eq('task_type', 'flexible');
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    await runDayScheduleWithNotices(supabase, user.id);
+    revalidatePath('/');
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to move task.';
+    return { success: false, error: message };
+  }
+}
+
+export async function clearManualLockAction(taskId: string): Promise<MoveTaskResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: 'You must be signed in.' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ manual_lock: false })
+      .eq('id', taskId)
+      .eq('user_id', user.id)
+      .eq('task_type', 'flexible');
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    await runDayScheduleWithNotices(supabase, user.id);
+    revalidatePath('/');
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to reset task.';
     return { success: false, error: message };
   }
 }
