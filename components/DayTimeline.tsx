@@ -13,7 +13,8 @@ import {
 } from '@/lib/schedule-service';
 import type { Task } from '@/lib/types';
 
-const PX_PER_MINUTE = 1.15;
+const PX_PER_MINUTE = 1.35;
+const MIN_BLOCK_HEIGHT = 44;
 
 type DayTimelineProps = {
   tasks: Task[];
@@ -27,6 +28,13 @@ type DragState = {
   offsetY: number;
   ghostTop: number;
   proposedStart: Date | null;
+};
+
+type OptimisticMove = {
+  taskId: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  manual_lock: true;
 };
 
 function formatHour(date: Date): string {
@@ -64,7 +72,10 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   const dayStartRef = useRef(dayStart);
   const dayEndRef = useRef(dayEnd);
   const heightPxRef = useRef(heightPx);
+  const optimisticRef = useRef<OptimisticMove | null>(null);
+
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [optimistic, setOptimistic] = useState<OptimisticMove | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -74,6 +85,20 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   dayStartRef.current = dayStart;
   dayEndRef.current = dayEnd;
   heightPxRef.current = heightPx;
+  optimisticRef.current = optimistic;
+
+  // Drop optimistic state once server props include the pinned times.
+  useEffect(() => {
+    if (!optimistic) return;
+    const serverTask = tasks.find((task) => task.id === optimistic.taskId);
+    if (
+      serverTask?.scheduled_start === optimistic.scheduled_start &&
+      serverTask?.scheduled_end === optimistic.scheduled_end &&
+      serverTask.manual_lock
+    ) {
+      setOptimistic(null);
+    }
+  }, [tasks, optimistic]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30_000);
@@ -86,9 +111,24 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     };
   }, []);
 
+  const displayTasks = useMemo(() => {
+    if (!optimistic) return tasks;
+    return tasks.map((task) =>
+      task.id === optimistic.taskId
+        ? {
+            ...task,
+            scheduled_start: optimistic.scheduled_start,
+            scheduled_end: optimistic.scheduled_end,
+            status: 'scheduled' as const,
+            manual_lock: true,
+          }
+        : task
+    );
+  }, [tasks, optimistic]);
+
   const scheduled = useMemo(
     () =>
-      tasks
+      displayTasks
         .filter(
           (task) =>
             task.scheduled_start &&
@@ -100,22 +140,22 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
           (a, b) =>
             new Date(a.scheduled_start!).getTime() - new Date(b.scheduled_start!).getTime()
         ),
-    [tasks, dayStart, dayEnd]
+    [displayTasks, dayStart, dayEnd]
   );
 
   const unscheduled = useMemo(
     () =>
-      tasks.filter(
+      displayTasks.filter(
         (task) =>
           task.task_type === 'flexible' &&
           (task.status === 'pending' || !task.scheduled_start)
       ),
-    [tasks]
+    [displayTasks]
   );
 
   const freeGaps = useMemo(
-    () => getTimelineFreeGaps(tasks, dayStart, dayEnd, drag?.taskId),
-    [tasks, dayStart, dayEnd, drag?.taskId]
+    () => getTimelineFreeGaps(displayTasks, dayStart, dayEnd, drag?.taskId),
+    [displayTasks, dayStart, dayEnd, drag?.taskId]
   );
 
   const hourMarks = useMemo(() => {
@@ -152,8 +192,21 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
       const raw = clientYToRawStart(clientY, state.offsetY);
       if (!raw) return;
 
+      const sourceTasks = optimisticRef.current
+        ? tasksRef.current.map((task) =>
+            task.id === optimisticRef.current!.taskId
+              ? {
+                  ...task,
+                  scheduled_start: optimisticRef.current!.scheduled_start,
+                  scheduled_end: optimisticRef.current!.scheduled_end,
+                  manual_lock: true,
+                }
+              : task
+          )
+        : tasksRef.current;
+
       const gaps = getTimelineFreeGaps(
-        tasksRef.current,
+        sourceTasks,
         dayStartRef.current,
         dayEndRef.current,
         state.taskId
@@ -189,17 +242,29 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
         return;
       }
 
+      const end = new Date(
+        state.proposedStart.getTime() + state.durationMinutes * 60 * 1000
+      );
+
+      // Optimistic: keep the card at the drop position immediately.
+      setOptimistic({
+        taskId: state.taskId,
+        scheduled_start: state.proposedStart.toISOString(),
+        scheduled_end: end.toISOString(),
+        manual_lock: true,
+      });
+      setError(null);
+      setMessage('Pinned to that slot.');
+
       startTransition(async () => {
-        setError(null);
-        setMessage(null);
         const result = await moveFlexibleTaskAction({
           taskId: state.taskId,
           scheduledStartIso: state.proposedStart!.toISOString(),
         });
         if (!result.success) {
+          setOptimistic(null);
           setError(result.error);
-        } else {
-          setMessage('Pinned to that slot.');
+          setMessage(null);
         }
       });
     }
@@ -264,6 +329,9 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     startTransition(async () => {
       setError(null);
       setMessage(null);
+      if (optimistic?.taskId === taskId) {
+        setOptimistic(null);
+      }
       const result = await clearManualLockAction(taskId);
       if (!result.success) {
         setError(result.error);
@@ -274,7 +342,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   }
 
   const draggingTask = drag
-    ? tasks.find((task) => task.id === drag.taskId) ?? null
+    ? displayTasks.find((task) => task.id === drag.taskId) ?? null
     : null;
 
   return (
@@ -364,22 +432,25 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
             {drag && draggingTask ? (
               <div
-                className={`pointer-events-none absolute inset-x-3 z-30 rounded-md border px-2.5 py-1.5 shadow-md ${
+                className={`pointer-events-none absolute inset-x-3 z-30 rounded-md border px-2 py-1.5 shadow-md ${
                   drag.proposedStart
                     ? 'border-[var(--accent)] bg-[rgba(95,127,104,0.28)]'
                     : 'border-[#c45c48] bg-[rgba(196,92,72,0.2)]'
                 }`}
                 style={{
                   top: drag.ghostTop,
-                  height: Math.max(28, draggingTask.duration_minutes * PX_PER_MINUTE),
+                  height: Math.max(
+                    MIN_BLOCK_HEIGHT,
+                    draggingTask.duration_minutes * PX_PER_MINUTE
+                  ),
                 }}
               >
-                <p className="truncate text-xs font-semibold text-[var(--ink)]">
+                <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
                   {draggingTask.title}
                 </p>
-                <p className="text-[10px] text-[var(--ink-muted)]">
+                <p className="text-[10px] leading-tight text-[var(--ink-muted)]">
                   {drag.proposedStart
-                    ? `${formatHour(drag.proposedStart)} · releasing pins here`
+                    ? `${formatHour(drag.proposedStart)} · release to pin`
                     : 'No free gap here'}
                 </p>
               </div>
@@ -391,10 +462,9 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               const clippedStart = start < dayStart ? dayStart : start;
               const clippedEnd = end > dayEnd ? dayEnd : end;
               const top = minutesBetween(dayStart, clippedStart) * PX_PER_MINUTE;
-              const height = Math.max(
-                28,
-                minutesBetween(clippedStart, clippedEnd) * PX_PER_MINUTE
-              );
+              const naturalHeight = minutesBetween(clippedStart, clippedEnd) * PX_PER_MINUTE;
+              const height = Math.max(MIN_BLOCK_HEIGHT, naturalHeight);
+              const isCompact = naturalHeight < 52;
               const isNow = start <= now && end > now;
               const isFlexible = task.task_type === 'flexible';
               const isFixed = task.task_type === 'fixed';
@@ -407,8 +477,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                     if (!isFlexible) return;
                     beginDrag(task, event);
                   }}
-                  className={`absolute inset-x-3 z-[5] overflow-hidden rounded-md border px-2.5 py-1.5 shadow-sm transition-opacity ${
-                    isDragging ? 'opacity-30' : 'opacity-100'
+                  className={`absolute inset-x-3 z-[5] rounded-md border px-2 py-1 shadow-sm transition-opacity ${
+                    isDragging ? 'opacity-25' : 'opacity-100'
                   } ${
                     isNow
                       ? 'border-[#c45c48] bg-[rgba(196,92,72,0.16)] ring-2 ring-[#c45c48]/40'
@@ -418,40 +488,23 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                   } ${isFlexible ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-default'}`}
                   style={{ top, height }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <p className="truncate text-xs font-semibold text-[var(--ink)]">
+                  {isCompact ? (
+                    <div className="flex h-full items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
                           {task.title}
+                          {isNow ? ' · Now' : ''}
                         </p>
-                        {isNow ? (
-                          <span className="rounded bg-[#c45c48] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                            Now
-                          </span>
-                        ) : null}
+                        <p className="truncate text-[10px] leading-tight text-[var(--ink-muted)]">
+                          {formatHour(start)}–{formatHour(end)}
+                          {isFlexible ? ` · ${priorityLabel(task.priority)}` : ''}
+                          {` · ${badgeKind(task)}`}
+                        </p>
                       </div>
-                      <p className="mt-0.5 text-[10px] text-[var(--ink-muted)]">
-                        {formatHour(start)} – {formatHour(end)}
-                        {task.duration_minutes ? ` · ${task.duration_minutes}m` : ''}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {isFlexible ? (
-                        <span
-                          className={`badge ${
-                            (task.priority ?? 3) <= 2 ? 'badge-accent' : 'badge-muted'
-                          }`}
-                        >
-                          {priorityLabel(task.priority)}
-                        </span>
-                      ) : null}
-                      <span className={`badge ${isFixed ? 'badge-muted' : 'badge-accent'}`}>
-                        {badgeKind(task)}
-                      </span>
                       {isManuallyLockedFlexible(task) ? (
                         <button
                           type="button"
-                          className="text-[10px] font-medium text-[var(--accent-hot)] underline"
+                          className="shrink-0 text-[10px] font-medium text-[var(--accent-hot)] underline"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => resetLock(task.id)}
                         >
@@ -459,7 +512,50 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                         </button>
                       ) : null}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex h-full items-start justify-between gap-2 overflow-hidden">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
+                            {task.title}
+                          </p>
+                          {isNow ? (
+                            <span className="rounded bg-[#c45c48] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                              Now
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-[10px] leading-tight text-[var(--ink-muted)]">
+                          {formatHour(start)} – {formatHour(end)}
+                          {task.duration_minutes ? ` · ${task.duration_minutes}m` : ''}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {isFlexible ? (
+                          <span
+                            className={`badge ${
+                              (task.priority ?? 3) <= 2 ? 'badge-accent' : 'badge-muted'
+                            }`}
+                          >
+                            {priorityLabel(task.priority)}
+                          </span>
+                        ) : null}
+                        <span className={`badge ${isFixed ? 'badge-muted' : 'badge-accent'}`}>
+                          {badgeKind(task)}
+                        </span>
+                        {isManuallyLockedFlexible(task) ? (
+                          <button
+                            type="button"
+                            className="text-[10px] font-medium text-[var(--accent-hot)] underline"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={() => resetLock(task.id)}
+                          >
+                            Auto
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
