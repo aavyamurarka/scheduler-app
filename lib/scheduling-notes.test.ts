@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { interpretSchedulingNotes } from '@/lib/scheduling-notes';
+import { interpretSchedulingNotes, notesTargetDay } from '@/lib/scheduling-notes';
 
 const DAY = '2026-07-06';
 const TZ = 'UTC';
@@ -10,6 +10,17 @@ function bounds() {
   const dayEnd = new Date(`${DAY}T23:00:00.000Z`);
   return { dayStart, dayEnd };
 }
+
+describe('notesTargetDay', () => {
+  it('detects tomorrow phrasing', () => {
+    expect(notesTargetDay('do it tomorrow')).toBe('tomorrow');
+    expect(notesTargetDay('answer emails tmrw')).toBe('tomorrow');
+  });
+
+  it('detects today phrasing', () => {
+    expect(notesTargetDay('do it today')).toBe('today');
+  });
+});
 
 describe('interpretSchedulingNotes', () => {
   it('returns null for empty notes', () => {

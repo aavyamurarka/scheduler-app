@@ -1,12 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import {
-  getDayBoundsFromPreferences,
-  getTodayDateParts,
-  type DayBounds,
-} from '@/lib/day-bounds';
+import { addCalendarDays, getDayBoundsFromPreferences, getTodayDateParts, type DayBounds } from '@/lib/day-bounds';
 import { getUserPreferences } from '@/lib/preferences';
-import { interpretSchedulingNotes } from '@/lib/scheduling-notes';
+import { interpretSchedulingNotes, notesTargetDay } from '@/lib/scheduling-notes';
 import {
   compareSchedules,
   computeFreeGaps,
@@ -73,9 +69,24 @@ export async function getSchedulableTasks(
   supabase: SupabaseClient,
   userId: string,
   bounds: DayBounds,
-  options: { includePendingFlexible?: boolean } = {}
+  options: {
+    includePendingFlexible?: boolean;
+    timeZone?: string;
+    referenceDate?: Date;
+  } = {}
 ): Promise<Task[]> {
   const includePendingFlexible = options.includePendingFlexible ?? true;
+  const timeZone = options.timeZone ?? 'UTC';
+  const referenceDate = options.referenceDate ?? bounds.dayStart;
+  const now = new Date();
+
+  const schedulingToday = isSameCalendarDay(timeZone, referenceDate, now);
+  const schedulingTomorrow = isSameCalendarDay(
+    timeZone,
+    referenceDate,
+    addCalendarDays(timeZone, now, 1)
+  );
+
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
@@ -93,8 +104,13 @@ export async function getSchedulableTasks(
       if (task.scheduled_start) {
         return isTaskScheduledToday(task, dayStart, dayEnd);
       }
-      // Pending flexibles only fill today's gaps — not tomorrow's preview day.
-      return includePendingFlexible;
+
+      if (!includePendingFlexible) return false;
+
+      const target = notesTargetDay(task.notes);
+      if (target === 'tomorrow') return schedulingTomorrow;
+      if (target === 'today') return schedulingToday;
+      return schedulingToday;
     }
 
     return isTaskScheduledToday(task, dayStart, dayEnd);
@@ -262,7 +278,12 @@ function shouldFillPendingFlexible(
   preferences: UserPreferences,
   referenceDate: Date
 ): boolean {
-  return isSameCalendarDay(preferences.timezone, referenceDate, new Date());
+  const now = new Date();
+  if (isSameCalendarDay(preferences.timezone, referenceDate, now)) {
+    return true;
+  }
+  const tomorrow = addCalendarDays(preferences.timezone, now, 1);
+  return isSameCalendarDay(preferences.timezone, referenceDate, tomorrow);
 }
 
 function isSameCalendarDay(
@@ -288,6 +309,8 @@ export async function runDaySchedule(
   const bounds = getDayBoundsFromPreferences(preferences, referenceDate);
   const tasks = await getSchedulableTasks(supabase, userId, bounds, {
     includePendingFlexible: shouldFillPendingFlexible(preferences, referenceDate),
+    timeZone: preferences.timezone,
+    referenceDate,
   });
   const { dayStart, dayEnd } = bounds;
 
@@ -349,6 +372,8 @@ export async function runDayScheduleWithNotices(
   const bounds = getDayBoundsFromPreferences(preferences, referenceDate);
   const tasks = await getSchedulableTasks(supabase, userId, bounds, {
     includePendingFlexible: shouldFillPendingFlexible(preferences, referenceDate),
+    timeZone: preferences.timezone,
+    referenceDate,
   });
   const before = buildBeforeMap(tasks);
 

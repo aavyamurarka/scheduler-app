@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+import { addCalendarDays } from '@/lib/day-bounds';
 import { createTask } from '@/lib/tasks';
-import { runDayScheduleWithNotices } from '@/lib/schedule-service';
+import { requireUserPreferences, runDayScheduleWithNotices } from '@/lib/schedule-service';
 import type { TaskType } from '@/lib/types';
 
 type CreateTaskBody = {
@@ -104,7 +105,10 @@ export async function POST(request: Request) {
 
   try {
     await createTask(supabase, userData.user.id, task);
+    const preferences = await requireUserPreferences(supabase, userData.user.id);
     const { notices } = await runDayScheduleWithNotices(supabase, userData.user.id);
+    const tomorrowRef = addCalendarDays(preferences.timezone, new Date(), 1);
+    await runDayScheduleWithNotices(supabase, userData.user.id, tomorrowRef);
 
     return NextResponse.json(
       { success: true, notices },

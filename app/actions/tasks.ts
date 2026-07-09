@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { createClient } from '@/lib/supabase/server';
 import { createTask } from '@/lib/tasks';
-import { getDayBoundsFromPreferences } from '@/lib/day-bounds';
+import { addCalendarDays, getDayBoundsFromPreferences } from '@/lib/day-bounds';
 import {
   getSchedulableTasks,
   requireUserPreferences,
@@ -83,7 +83,10 @@ export async function createTaskAction(
 
   try {
     await createTask(supabase, user.id, newTask);
+    const preferences = await requireUserPreferences(supabase, user.id);
     const { notices } = await runDayScheduleWithNotices(supabase, user.id);
+    const tomorrowRef = addCalendarDays(preferences.timezone, new Date(), 1);
+    await runDayScheduleWithNotices(supabase, user.id, tomorrowRef);
 
     revalidatePath('/');
     return { success: true, notices };

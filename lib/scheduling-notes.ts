@@ -6,6 +6,29 @@ export type SchedulingConstraints = {
   notAfter?: Date;
 };
 
+/** Day-level hint from notes — when to place a pending flexible task. */
+export type NotesTargetDay = 'today' | 'tomorrow';
+
+/**
+ * Which calendar day the user wants (if stated).
+ * null = no preference → schedule into today by default.
+ */
+export function notesTargetDay(notes: string | null | undefined): NotesTargetDay | null {
+  if (!notes?.trim()) return null;
+
+  const text = notes.toLowerCase();
+
+  if (/\b(tomorrow|tmrw|tomorow|next day)\b/.test(text)) {
+    return 'tomorrow';
+  }
+
+  if (/\b(today|tonight)\b/.test(text)) {
+    return 'today';
+  }
+
+  return null;
+}
+
 const EVENING_START = { hour: 17, minute: 0 };
 const AFTERNOON_START = { hour: 12, minute: 0 };
 const AFTERNOON_END = { hour: 17, minute: 0 };
@@ -58,6 +81,12 @@ export function interpretSchedulingNotes(
   const text = notes.toLowerCase();
   let notBefore: Date | undefined;
   let notAfter: Date | undefined;
+
+  // Day-only phrases are handled by notesTargetDay — not time windows.
+  const dayOnly =
+    notesTargetDay(notes) !== null &&
+    !/\b(morning|afternoon|evening|night|after|before)\b/.test(text);
+  if (dayOnly) return null;
 
   const setNotBefore = (hour: number, minute: number) => {
     const candidate = wallOnDay(dayStart, timeZone, hour, minute);
