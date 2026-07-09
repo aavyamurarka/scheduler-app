@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Scheduler Quick Capture",
+  "version": "0.1.0",
+  "description": "Highlight text on any page and add it to Scheduler as a task.",
+  "permissions": ["contextMenus", "storage"],
+  "host_permissions": ["https://schedulerapp-xi.vercel.app/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Add task",
+    "default_popup": "popup.html"
+  }
+}
+

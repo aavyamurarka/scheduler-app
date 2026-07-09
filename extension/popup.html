@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scheduler Quick Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div>
+          <div class="title">Scheduler</div>
+          <div class="subtitle">Quick capture</div>
+        </div>
+        <button id="logoutBtn" class="link" type="button" hidden>Log out</button>
+      </header>
+
+      <div id="errorBox" class="error" role="alert" hidden></div>
+      <div id="okBox" class="ok" role="status" hidden></div>
+
+      <section id="loginSection" class="card" hidden>
+        <h2>Sign in</h2>
+        <p class="muted">Use the same account as the web app.</p>
+
+        <label>
+          <span>Email</span>
+          <input id="email" type="email" autocomplete="email" />
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="password" type="password" autocomplete="current-password" />
+        </label>
+
+        <button id="loginBtn" class="primary" type="button">Sign in</button>
+      </section>
+
+      <section id="taskSection" class="card" hidden>
+        <h2>Add a task</h2>
+
+        <label>
+          <span>Title</span>
+          <textarea id="title" rows="3" placeholder="e.g. Reply to email"></textarea>
+        </label>
+
+        <div class="row">
+          <label class="grow">
+            <span>Type</span>
+            <select id="task_type">
+              <option value="flexible" selected>Flexible</option>
+              <option value="fixed">Fixed</option>
+            </select>
+          </label>
+
+          <label class="grow">
+            <span>Duration (min)</span>
+            <input id="duration_minutes" type="number" min="1" step="1" value="30" />
+          </label>
+        </div>
+
+        <div id="flexibleFields">
+          <div class="row">
+            <label class="grow">
+              <span>Priority</span>
+              <select id="priority">
+                <option value="1">1 — Highest</option>
+                <option value="2">2 — High</option>
+                <option value="3" selected>3 — Medium</option>
+                <option value="4">4 — Low</option>
+                <option value="5">5 — Lowest</option>
+              </select>
+            </label>
+
+            <label class="grow">
+              <span>Deadline (optional)</span>
+              <input id="deadline" type="datetime-local" />
+            </label>
+          </div>
+        </div>
+
+        <div id="fixedFields" hidden>
+          <label>
+            <span>Start time</span>
+            <input id="scheduled_start" type="datetime-local" />
+          </label>
+        </div>
+
+        <button id="saveBtn" class="primary" type="button">Save</button>
+      </section>
+
+      <footer class="footer">
+        <a class="link" href="https://schedulerapp-xi.vercel.app" target="_blank" rel="noreferrer">
+          Open Scheduler
+        </a>
+      </footer>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
+
