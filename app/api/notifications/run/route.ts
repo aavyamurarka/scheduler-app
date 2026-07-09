@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getPreTaskNotificationWindow } from '@/lib/notification-timing';
 
 type TaskRow = {
   id: string;
@@ -24,7 +25,7 @@ async function sendOneSignalPush(args: {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Basic ${args.apiKey}`,
+      Authorization: `Key ${args.apiKey}`,
     },
     body: JSON.stringify({
       app_id: args.appId,
@@ -35,12 +36,22 @@ async function sendOneSignalPush(args: {
     }),
   });
 
+  const text = await res.text().catch(() => '');
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
     throw new Error(`OneSignal send failed: ${res.status} ${text}`);
   }
-}
 
+  try {
+    const body = JSON.parse(text) as { errors?: string[]; id?: string };
+    if (body.errors && body.errors.length > 0) {
+      throw new Error(`OneSignal send failed: ${body.errors.join('; ')}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('OneSignal send failed:')) {
+      throw err;
+    }
+  }
+}
 function isAuthorized(request: NextRequest): boolean {
   const expectedSecret = process.env.CRON_SECRET?.trim();
   if (!expectedSecret) {
@@ -104,14 +115,14 @@ async function runNotifications() {
     const supabase = createAdminClient();
 
     const now = new Date();
-    const windowEnd = new Date(now.getTime() + 15 * 60 * 1000);
+    const { windowStart, windowEnd } = getPreTaskNotificationWindow(now);
 
     const { data: tasks, error: tasksError } = await supabase
       .from('tasks')
       .select('id,user_id,title,scheduled_start')
       .is('pre_task_notified_at', null)
       .neq('status', 'completed')
-      .gte('scheduled_start', now.toISOString())
+      .gte('scheduled_start', windowStart.toISOString())
       .lt('scheduled_start', windowEnd.toISOString());
 
     if (tasksError) {
@@ -130,11 +141,18 @@ async function runNotifications() {
 
     const dueTasks = (tasks ?? []) as TaskRow[];
     if (dueTasks.length === 0) {
-      return NextResponse.json({ ok: true, notified: 0 });
+      return NextResponse.json({
+        ok: true,
+        notified: 0,
+        dueTasks: 0,
+        skippedNoSubscriptions: 0,
+      });
     }
 
     let notified = 0;
+    let skippedNoSubscriptions = 0;
     const taskIdsNotified: string[] = [];
+    const errors: string[] = [];
 
     for (const task of dueTasks) {
       const { data: subs, error: subsError } = await supabase
@@ -143,6 +161,7 @@ async function runNotifications() {
         .eq('user_id', task.user_id);
 
       if (subsError) {
+        errors.push(`task ${task.id}: ${subsError.message}`);
         continue;
       }
 
@@ -151,19 +170,24 @@ async function runNotifications() {
         .filter(Boolean);
 
       if (subscriptionIds.length === 0) {
+        skippedNoSubscriptions += 1;
         continue;
       }
 
-      await sendOneSignalPush({
-        appId: onesignalAppId,
-        apiKey: onesignalApiKey,
-        subscriptionIds,
-        title: 'Up next',
-        message: task.title,
-      });
-
-      taskIdsNotified.push(task.id);
-      notified += 1;
+      try {
+        await sendOneSignalPush({
+          appId: onesignalAppId,
+          apiKey: onesignalApiKey,
+          subscriptionIds,
+          title: 'Up next',
+          message: task.title,
+        });
+        taskIdsNotified.push(task.id);
+        notified += 1;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown send error';
+        errors.push(`task ${task.id}: ${message}`);
+      }
     }
 
     if (taskIdsNotified.length > 0) {
@@ -173,7 +197,13 @@ async function runNotifications() {
         .in('id', taskIdsNotified);
     }
 
-    return NextResponse.json({ ok: true, notified });
+    return NextResponse.json({
+      ok: errors.length === 0,
+      notified,
+      dueTasks: dueTasks.length,
+      skippedNoSubscriptions,
+      errors: errors.length > 0 ? errors : undefined,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

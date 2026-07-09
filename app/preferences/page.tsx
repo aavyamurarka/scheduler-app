@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { PreferencesForm } from '@/components/OnboardingForm';
+import { EnableNotificationsButton } from '@/components/EnableNotificationsButton';
 import { getUserPreferences } from '@/lib/preferences';
 import { createClient } from '@/lib/supabase/server';
 
@@ -29,6 +30,7 @@ export default async function PreferencesPage() {
           initialWakeTime={preferences.wake_time}
           initialSleepTime={preferences.sleep_time}
         />
+        <EnableNotificationsButton />
         <div className="mt-6 text-center">
           <Link href="/" className="text-sm font-medium text-[var(--accent-hot)] hover:underline">
             Back to schedule
