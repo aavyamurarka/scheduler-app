@@ -12,6 +12,7 @@ type CreateTaskBody = {
   priority?: number;
   deadline?: string;
   scheduled_start?: string;
+  notes?: string;
 };
 
 function corsHeaders() {
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
     title,
     task_type: body.task_type,
     duration_minutes: durationMinutes,
+    notes: typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim() : null,
   };
 
   if (body.task_type === 'fixed') {

@@ -155,6 +155,8 @@ async function createTask(session) {
     body.priority = Number($('priority').value);
     const deadline = toIsoOrNullFromDatetimeLocal($('deadline').value);
     if (deadline) body.deadline = deadline;
+    const notes = $('notes').value.trim();
+    if (notes) body.notes = notes;
   }
 
   const resp = await fetch(`${SCHEDULER_API_BASE}/api/tasks/create`, {

@@ -76,6 +76,26 @@ describe('scheduleDay', () => {
     expect(new Date(result.scheduled[0].scheduled_end)).toEqual(at(DAY, 8, 30));
   });
 
+  it('respects scheduling notes constraints (evening only)', () => {
+    const flexible: SchedulerFlexibleTask[] = [
+      {
+        id: 'emails',
+        duration_minutes: 30,
+        priority: 2,
+        deadline: null,
+        constraints: {
+          notBefore: at(DAY, 17),
+        },
+      },
+    ];
+
+    const result = scheduleDay([], flexible, dayStart, dayEnd);
+
+    expect(result.unscheduled).toEqual([]);
+    expect(new Date(result.scheduled[0].scheduled_start)).toEqual(at(DAY, 17));
+    expect(new Date(result.scheduled[0].scheduled_end)).toEqual(at(DAY, 17, 30));
+  });
+
   it('schedules higher priority tasks first', () => {
     const flexible: SchedulerFlexibleTask[] = [
       { id: 'low', duration_minutes: 60, priority: 4, deadline: null },

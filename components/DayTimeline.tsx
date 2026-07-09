@@ -15,6 +15,10 @@ import type { Task } from '@/lib/types';
 
 const PX_PER_MINUTE = 1.35;
 const MIN_BLOCK_HEIGHT = 44;
+/** Keeps first/last hour labels from being clipped by the scroll edge. */
+const TRACK_EDGE_PAD = 14;
+/** Room for header + section title + hint above the scrollable track. */
+const CALENDAR_CHROME_OFFSET = '11.5rem';
 
 type DayTimelineProps = {
   tasks: Task[];
@@ -67,6 +71,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   const heightPx = totalMinutes * PX_PER_MINUTE;
 
   const trackRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const tasksRef = useRef(tasks);
   const dayStartRef = useRef(dayStart);
@@ -160,20 +165,48 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
   const hourMarks = useMemo(() => {
     const marks: Date[] = [];
+    // Always show the wake boundary, then every whole hour, then sleep.
+    marks.push(new Date(dayStart));
+
     const cursor = new Date(dayStart);
     cursor.setMinutes(0, 0, 0);
-    if (cursor < dayStart) {
+    if (cursor <= dayStart) {
       cursor.setHours(cursor.getHours() + 1);
     }
-    while (cursor <= dayEnd) {
+
+    while (cursor < dayEnd) {
       marks.push(new Date(cursor));
       cursor.setHours(cursor.getHours() + 1);
     }
+
+    if (dayEnd.getTime() !== dayStart.getTime()) {
+      marks.push(new Date(dayEnd));
+    }
+
     return marks;
   }, [dayStart, dayEnd]);
 
+  function trackTop(date: Date): number {
+    return TRACK_EDGE_PAD + minutesBetween(dayStart, date) * PX_PER_MINUTE;
+  }
+
+  // Jump near "now" once; user can scroll the full wake→sleep range.
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const current = new Date();
+    if (current < dayStart || current > dayEnd) {
+      scroller.scrollTop = 0;
+      return;
+    }
+    scroller.scrollTop = Math.max(0, trackTop(current) - 80);
+    // Intentionally only when the viewed day changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayStartIso, dayEndIso]);
+
   const nowOffset =
     now >= dayStart && now <= dayEnd ? minutesBetween(dayStart, now) * PX_PER_MINUTE : null;
+  const showUnscheduled = now >= dayStart;
 
   useEffect(() => {
     function clientYToRawStart(clientY: number, offsetY: number): Date | null {
@@ -181,7 +214,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
       if (!track) return null;
       const rect = track.getBoundingClientRect();
       const y = Math.min(
-        Math.max(0, clientY - rect.top - offsetY),
+        Math.max(0, clientY - rect.top - offsetY - TRACK_EDGE_PAD),
         heightPxRef.current
       );
       const minutes = y / PX_PER_MINUTE;
@@ -227,6 +260,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
       }
 
       const top = minutesBetween(dayStartRef.current, clamped) * PX_PER_MINUTE;
+      // ghostTop is minutes-based; TRACK_EDGE_PAD is applied when rendering.
       const next = { ...state, proposedStart: clamped, ghostTop: top };
       dragRef.current = next;
       setDrag(next);
@@ -304,8 +338,9 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     const track = trackRef.current;
     if (!track) return;
 
-    const blockTop =
-      minutesBetween(dayStart, new Date(task.scheduled_start)) * PX_PER_MINUTE;
+    const start = new Date(task.scheduled_start);
+    const minutesFromStart = minutesBetween(dayStart, start) * PX_PER_MINUTE;
+    const blockTop = TRACK_EDGE_PAD + minutesFromStart;
     const rect = track.getBoundingClientRect();
     const pointerY = event.clientY - rect.top;
     const offsetY = pointerY - blockTop;
@@ -318,8 +353,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
       taskId: task.id,
       durationMinutes: task.duration_minutes,
       offsetY,
-      ghostTop: blockTop,
-      proposedStart: new Date(task.scheduled_start),
+      ghostTop: minutesFromStart,
+      proposedStart: start,
     };
     dragRef.current = initial;
     setDrag(initial);
@@ -346,8 +381,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     : null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex min-h-0 flex-col gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-[var(--ink-muted)]">
           Drag flexible tasks onto free gaps · snaps to 15 min · fixed blocks stay locked
         </p>
@@ -357,55 +392,61 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
       </div>
 
       {error ? (
-        <p className="alert alert-error" role="alert">
+        <p className="alert alert-error shrink-0" role="alert">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p className="alert alert-ok" role="status">
+        <p className="alert alert-ok shrink-0" role="status">
           {message}
         </p>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-lg border border-[var(--glass-border)] bg-white/40">
-        <div className="grid grid-cols-[3.5rem_minmax(0,1fr)]">
-          <div
-            className="relative border-r border-[var(--glass-border)] bg-white/30"
-            style={{ height: heightPx }}
-          >
-            {hourMarks.map((mark) => {
-              const top = minutesBetween(dayStart, mark) * PX_PER_MINUTE;
-              return (
-                <div
-                  key={mark.toISOString()}
-                  className="absolute right-2 -translate-y-1/2 text-[10px] font-medium text-[var(--ink-faint)]"
-                  style={{ top }}
-                >
-                  {formatHour(mark)}
-                </div>
-              );
-            })}
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto overscroll-contain rounded-lg border border-[var(--glass-border)] bg-white/40"
+        style={{ maxHeight: `calc(100dvh - ${CALENDAR_CHROME_OFFSET})` }}
+      >
+        <div
+          className="grid grid-cols-[3.5rem_minmax(0,1fr)]"
+          style={{ height: heightPx + TRACK_EDGE_PAD * 2 }}
+        >
+          <div className="relative border-r border-[var(--glass-border)] bg-white/30">
+            {hourMarks.map((mark, index) => (
+              <div
+                key={`${mark.toISOString()}-${index}`}
+                className="absolute right-2 text-[10px] font-medium text-[var(--ink-faint)]"
+                style={{
+                  top: trackTop(mark),
+                  transform:
+                    index === 0
+                      ? 'translateY(0)'
+                      : index === hourMarks.length - 1
+                        ? 'translateY(-100%)'
+                        : 'translateY(-50%)',
+                }}
+              >
+                {formatHour(mark)}
+              </div>
+            ))}
           </div>
 
-          <div ref={trackRef} className="relative select-none" style={{ height: heightPx }}>
-            {hourMarks.map((mark) => {
-              const top = minutesBetween(dayStart, mark) * PX_PER_MINUTE;
-              return (
-                <div
-                  key={`line-${mark.toISOString()}`}
-                  className="pointer-events-none absolute inset-x-0 border-t border-[rgba(70,100,80,0.12)]"
-                  style={{ top }}
-                />
-              );
-            })}
+          <div ref={trackRef} className="relative select-none">
+            {hourMarks.map((mark, index) => (
+              <div
+                key={`line-${mark.toISOString()}-${index}`}
+                className="pointer-events-none absolute inset-x-0 border-t border-[rgba(70,100,80,0.12)]"
+                style={{ top: trackTop(mark) }}
+              />
+            ))}
 
             {freeGaps.map((gap, index) => {
-              const top = minutesBetween(dayStart, gap.start) * PX_PER_MINUTE;
+              const top = trackTop(gap.start);
               const height = Math.max(8, minutesBetween(gap.start, gap.end) * PX_PER_MINUTE);
               return (
                 <div
                   key={`gap-${index}`}
-                  className="pointer-events-none absolute inset-x-2 rounded-md border border-dashed border-[rgba(95,127,104,0.35)] bg-[rgba(95,127,104,0.08)]"
+                  className="pointer-events-none absolute inset-x-0 border-y border-dashed border-[rgba(95,127,104,0.28)] bg-[rgba(95,127,104,0.06)]"
                   style={{ top, height }}
                 >
                   {height > 22 ? (
@@ -420,7 +461,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
             {nowOffset !== null ? (
               <div
                 className="pointer-events-none absolute inset-x-0 z-20 flex items-center"
-                style={{ top: nowOffset }}
+                style={{ top: TRACK_EDGE_PAD + nowOffset }}
               >
                 <div className="h-2 w-2 -translate-x-1 rounded-full bg-[#c45c48]" />
                 <div className="h-[2px] flex-1 bg-[#c45c48]" />
@@ -432,13 +473,13 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
             {drag && draggingTask ? (
               <div
-                className={`pointer-events-none absolute inset-x-3 z-30 rounded-md border px-2 py-1.5 shadow-md ${
+                className={`pointer-events-none absolute inset-x-0 z-30 border px-2.5 py-1.5 shadow-md ${
                   drag.proposedStart
-                    ? 'border-[var(--accent)] bg-[rgba(95,127,104,0.28)]'
+                    ? 'border-[var(--accent)] bg-[rgba(69,104,83,0.42)]'
                     : 'border-[#c45c48] bg-[rgba(196,92,72,0.2)]'
                 }`}
                 style={{
-                  top: drag.ghostTop,
+                  top: TRACK_EDGE_PAD + drag.ghostTop,
                   height: Math.max(
                     MIN_BLOCK_HEIGHT,
                     draggingTask.duration_minutes * PX_PER_MINUTE
@@ -461,9 +502,12 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               const end = new Date(task.scheduled_end!);
               const clippedStart = start < dayStart ? dayStart : start;
               const clippedEnd = end > dayEnd ? dayEnd : end;
-              const top = minutesBetween(dayStart, clippedStart) * PX_PER_MINUTE;
+              const top = trackTop(clippedStart);
               const naturalHeight = minutesBetween(clippedStart, clippedEnd) * PX_PER_MINUTE;
-              const height = Math.max(MIN_BLOCK_HEIGHT, naturalHeight);
+              const height = Math.min(
+                Math.max(MIN_BLOCK_HEIGHT, naturalHeight),
+                Math.max(12, TRACK_EDGE_PAD + heightPx - top)
+              );
               const isCompact = naturalHeight < 52;
               const isNow = start <= now && end > now;
               const isFlexible = task.task_type === 'flexible';
@@ -477,14 +521,14 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                     if (!isFlexible) return;
                     beginDrag(task, event);
                   }}
-                  className={`absolute inset-x-3 z-[5] rounded-md border px-2 py-1 shadow-sm transition-opacity ${
+                  className={`absolute inset-x-0 z-[5] border px-2.5 py-1 shadow-sm transition-opacity ${
                     isDragging ? 'opacity-25' : 'opacity-100'
                   } ${
                     isNow
-                      ? 'border-[#c45c48] bg-[rgba(196,92,72,0.16)] ring-2 ring-[#c45c48]/40'
+                      ? 'border-[#c45c48] bg-[rgba(196,92,72,0.22)] ring-2 ring-[#c45c48]/40'
                       : isFixed
-                        ? 'border-[var(--glass-border-strong)] bg-white/80'
-                        : 'border-[rgba(95,127,104,0.35)] bg-[linear-gradient(120deg,rgba(95,127,104,0.18),rgba(255,255,255,0.75))]'
+                        ? 'border-[var(--glass-border-strong)] bg-white/85'
+                        : 'border-[rgba(69,104,83,0.45)] bg-[linear-gradient(120deg,rgba(69,104,83,0.34),rgba(95,127,104,0.22))]'
                   } ${isFlexible ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-default'}`}
                   style={{ top, height }}
                 >
@@ -563,12 +607,12 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
         </div>
       </div>
 
-      {unscheduled.length > 0 ? (
-        <section>
+      {showUnscheduled && unscheduled.length > 0 ? (
+        <section className="shrink-0">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--warn)]">
             Couldn&apos;t schedule
           </h3>
-          <ul className="space-y-2">
+          <ul className="max-h-28 space-y-2 overflow-y-auto">
             {unscheduled.map((task) => (
               <li
                 key={task.id}

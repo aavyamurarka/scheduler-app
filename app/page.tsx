@@ -1,20 +1,20 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 
-import { AutoEnableNotifications } from '@/components/AutoEnableNotifications';
-import { AutoScheduleRefresher } from '@/components/AutoScheduleRefresher';
-import { DayTimeline } from '@/components/DayTimeline';
-import { RealtimeScheduleRefresher } from '@/components/RealtimeScheduleRefresher';
-import { TaskInput } from '@/components/TaskInput';
-import { SignOutButton } from '@/components/SignOutButton';
-import { getDayBoundsFromPreferences } from '@/lib/day-bounds';
-import { getCalendarConnection, syncGoogleCalendarEvents } from '@/lib/calendar-sync';
+import { HomeSchedule } from '@/components/HomeSchedule';
+import {
+  addCalendarDays,
+  getDayBoundsFromPreferences,
+} from '@/lib/day-bounds';
+import { getCalendarConnection } from '@/lib/calendar-sync';
 import { getUserPreferences } from '@/lib/preferences';
-import { runDaySchedule } from '@/lib/schedule-service';
 import { createClient } from '@/lib/supabase/server';
 import { getTasks } from '@/lib/tasks';
 
-export default async function Home() {
+type HomeProps = {
+  searchParams?: Promise<{ day?: string }>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,20 +30,19 @@ export default async function Home() {
     redirect('/onboarding');
   }
 
-  const calendarConnection = await getCalendarConnection(supabase, user.id);
+  const params = (await searchParams) ?? {};
+  const initialDay = params.day === 'tomorrow' ? 'tomorrow' : 'today';
 
-  if (calendarConnection) {
-    try {
-      await syncGoogleCalendarEvents(supabase, user.id);
-    } catch (err) {
-      console.error('[Scheduler] Auto calendar sync failed', err);
-    }
-  }
+  // Schedule + Google sync happen in createTaskAction / AutoScheduleRefresher —
+  // keep page render to a fast read so revalidatePath after add/move stays snappy.
+  const [calendarConnection, tasks] = await Promise.all([
+    getCalendarConnection(supabase, user.id),
+    getTasks(supabase, user.id),
+  ]);
 
-  await runDaySchedule(supabase, user.id);
-
-  const bounds = getDayBoundsFromPreferences(preferences);
-  const tasks = await getTasks(supabase, user.id);
+  const tomorrowRef = addCalendarDays(preferences.timezone, new Date(), 1);
+  const todayBounds = getDayBoundsFromPreferences(preferences, new Date());
+  const tomorrowBounds = getDayBoundsFromPreferences(preferences, tomorrowRef);
   const syncLabel = calendarConnection?.updated_at
     ? new Date(calendarConnection.updated_at).toLocaleString(undefined, {
         month: 'short',
@@ -54,61 +53,20 @@ export default async function Home() {
     : null;
 
   return (
-    <div className="relative min-h-full">
-      <AutoScheduleRefresher isCalendarConnected={Boolean(calendarConnection)} />
-      <RealtimeScheduleRefresher userId={user.id} />
-      <AutoEnableNotifications />
-
-      <header className="sticky top-0 z-20 border-b border-[var(--glass-border)] bg-[rgba(247,243,234,0.78)] px-3 py-2.5 backdrop-blur-md sm:px-4 lg:px-5">
-        <div className="mx-auto flex w-full max-w-[88rem] items-center justify-between gap-3">
-          <div>
-            <h1 className="font-display text-lg font-semibold tracking-tight text-[var(--ink)] sm:text-xl">
-              Scheduler
-            </h1>
-            <p className="text-xs text-[var(--ink-muted)]">
-              Today
-              {calendarConnection
-                ? syncLabel
-                  ? ` · Calendar synced ${syncLabel}`
-                  : ' · Calendar connected'
-                : ' · Calendar not connected'}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!calendarConnection ? (
-              <a href="/api/google-calendar/connect" className="btn-primary text-xs">
-                Connect calendar
-              </a>
-            ) : null}
-            <Link href="/preferences" className="btn-ghost text-xs">
-              Preferences
-            </Link>
-            <SignOutButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto grid w-full max-w-[88rem] gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,22rem)] lg:gap-5 lg:px-5 lg:py-5">
-        <section className="animate-rise glass bubble-lg min-h-[32rem] p-3 sm:p-4">
-          <div className="mb-3">
-            <h2 className="font-display text-base font-semibold text-[var(--ink)] sm:text-lg">
-              Today&apos;s calendar
-            </h2>
-            <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
-              Free gaps are marked. Drag flexible tasks to pin a slot.
-            </p>
-          </div>
-          <DayTimeline
-            tasks={tasks}
-            dayStartIso={bounds.dayStart.toISOString()}
-            dayEndIso={bounds.dayEnd.toISOString()}
-          />
-        </section>
-
-        <aside className="animate-rise animate-rise-delay-1 lg:sticky lg:top-16 lg:self-start">
-          <TaskInput />
-        </aside>
-      </main>
-    </div>
+    <HomeSchedule
+      userId={user.id}
+      tasks={tasks}
+      todayBounds={{
+        dayStartIso: todayBounds.dayStart.toISOString(),
+        dayEndIso: todayBounds.dayEnd.toISOString(),
+      }}
+      tomorrowBounds={{
+        dayStartIso: tomorrowBounds.dayStart.toISOString(),
+        dayEndIso: tomorrowBounds.dayEnd.toISOString(),
+      }}
+      initialDay={initialDay}
+      isCalendarConnected={Boolean(calendarConnection)}
+      syncLabel={syncLabel}
+    />
   );
 }

@@ -63,6 +63,7 @@ export async function createTaskAction(
     title,
     task_type: taskType as TaskType,
     duration_minutes: durationMinutes,
+    notes: parseOptionalString(formData.get('notes')) ?? null,
   };
 
   if (taskType === 'fixed') {
@@ -112,7 +113,8 @@ export async function moveFlexibleTaskAction(args: {
 
   try {
     const preferences = await requireUserPreferences(supabase, user.id);
-    const bounds = getDayBoundsFromPreferences(preferences);
+    // Bounds for the calendar day containing the drop (supports Today + Tomorrow).
+    const bounds = getDayBoundsFromPreferences(preferences, proposedStart);
     const tasks = await getSchedulableTasks(supabase, user.id, bounds);
 
     const validation = validateFlexiblePlacement({
@@ -144,7 +146,7 @@ export async function moveFlexibleTaskAction(args: {
       return { success: false, error: error.message };
     }
 
-    await runDayScheduleWithNotices(supabase, user.id);
+    await runDayScheduleWithNotices(supabase, user.id, proposedStart);
     revalidatePath('/');
     return { success: true };
   } catch (err) {

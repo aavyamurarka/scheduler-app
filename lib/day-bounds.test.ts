@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { getCalendarDayBounds, getDayBoundsFromPreferences } from '@/lib/day-bounds';
+import { addCalendarDays, getCalendarDayBounds, getDayBoundsFromPreferences } from '@/lib/day-bounds';
 import type { UserPreferences } from '@/lib/types';
+
+describe('addCalendarDays', () => {
+  it('shifts a calendar date by N days in the timezone', () => {
+    const referenceDate = new Date('2026-07-08T12:00:00.000Z');
+    const tomorrow = addCalendarDays('UTC', referenceDate, 1);
+    const { dayStart, dayEnd } = getCalendarDayBounds('UTC', tomorrow);
+
+    expect(dayStart.toISOString()).toBe('2026-07-09T00:00:00.000Z');
+    expect(dayEnd.toISOString()).toBe('2026-07-10T00:00:00.000Z');
+  });
+});
 
 describe('getCalendarDayBounds', () => {
   it('returns midnight-to-midnight in the given timezone', () => {

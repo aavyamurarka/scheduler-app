@@ -40,6 +40,17 @@ export function getTodayDateParts(
   };
 }
 
+/** Shift a calendar date by `days` in `timeZone`, returning a Date near noon UTC that day. */
+export function addCalendarDays(
+  timeZone: string,
+  referenceDate: Date,
+  days: number
+): Date {
+  const { year, month, day } = getTodayDateParts(timeZone, referenceDate);
+  const next = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return next;
+}
+
 /** Converts a wall-clock time on a calendar date in `timeZone` to a UTC Date. */
 export function wallClockInZoneToDate(
   year: number,

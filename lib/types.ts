@@ -17,6 +17,8 @@ export type Task = {
   google_event_id: string | null;
   /** When true, flexible task times are user-pinned and ignored by auto-schedule. */
   manual_lock: boolean;
+  /** Free-text scheduling hints (e.g. "evenings only after uni"). */
+  notes: string | null;
 };
 
 export type NewTask = {
@@ -28,6 +30,7 @@ export type NewTask = {
   scheduled_start?: string | null;
   scheduled_end?: string | null;
   status?: TaskStatus;
+  notes?: string | null;
 };
 
 export type GoogleCalendarTokens = {

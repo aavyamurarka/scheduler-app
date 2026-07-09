@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { getCalendarDayBounds } from '@/lib/day-bounds';
+import { addCalendarDays, getCalendarDayBounds } from '@/lib/day-bounds';
 import {
   eventDurationMinutes,
   fetchTodaysEvents,
@@ -85,18 +85,35 @@ export async function syncGoogleCalendarEvents(
 ): Promise<{ imported: number; skipped: number; cleaned: number }> {
   const preferences = await getUserPreferences(supabase, userId);
   const timeZone = preferences?.timezone ?? 'UTC';
-  const { dayStart, dayEnd } = getCalendarDayBounds(timeZone);
+  // Keep today + tomorrow so the day toggle can show calendar events.
+  const todayBounds = getCalendarDayBounds(timeZone);
+  const tomorrowRef = addCalendarDays(timeZone, new Date(), 1);
+  const tomorrowBounds = getCalendarDayBounds(timeZone, tomorrowRef);
+  const windowStart = todayBounds.dayStart;
+  const windowEnd = tomorrowBounds.dayEnd;
 
   const accessToken = await getValidAccessToken(supabase, userId);
   const events = await fetchTodaysEvents(
     accessToken,
-    dayStart.toISOString(),
-    dayEnd.toISOString()
+    windowStart.toISOString(),
+    windowEnd.toISOString()
   );
 
   let imported = 0;
   let skipped = 0;
   const importedEventIds: string[] = [];
+  const rows: Array<{
+    user_id: string;
+    google_event_id: string;
+    title: string;
+    task_type: 'fixed';
+    duration_minutes: number;
+    scheduled_start: string;
+    scheduled_end: string;
+    priority: null;
+    deadline: null;
+    status: 'scheduled';
+  }> = [];
 
   for (const event of events) {
     const start = event.start?.dateTime;
@@ -107,59 +124,64 @@ export async function syncGoogleCalendarEvents(
       continue;
     }
 
-    const { error } = await supabase.from('tasks').upsert(
-      {
-        user_id: userId,
-        google_event_id: event.id,
-        title: event.summary?.trim() || 'Untitled event',
-        task_type: 'fixed',
-        duration_minutes: eventDurationMinutes(start, end),
-        scheduled_start: new Date(start).toISOString(),
-        scheduled_end: new Date(end).toISOString(),
-        priority: null,
-        deadline: null,
-        status: 'scheduled',
-      },
-      { onConflict: 'user_id,google_event_id' }
-    );
+    importedEventIds.push(event.id);
+    rows.push({
+      user_id: userId,
+      google_event_id: event.id,
+      title: event.summary?.trim() || 'Untitled event',
+      task_type: 'fixed',
+      duration_minutes: eventDurationMinutes(start, end),
+      scheduled_start: new Date(start).toISOString(),
+      scheduled_end: new Date(end).toISOString(),
+      priority: null,
+      deadline: null,
+      status: 'scheduled',
+    });
+  }
+
+  // One bulk upsert instead of N sequential round-trips.
+  if (rows.length > 0) {
+    const { error } = await supabase.from('tasks').upsert(rows, {
+      onConflict: 'user_id,google_event_id',
+    });
 
     if (error) {
       throw error;
     }
-
-    importedEventIds.push(event.id);
-    imported += 1;
+    imported = rows.length;
   }
 
-  // Remove Google-imported tasks outside today's calendar day (in user timezone).
+  // Remove Google-imported tasks outside the today→tomorrow window.
   const { data: staleOutside, error: staleOutsideError } = await supabase
     .from('tasks')
     .delete()
     .eq('user_id', userId)
     .not('google_event_id', 'is', null)
-    .or(`scheduled_start.lt.${dayStart.toISOString()},scheduled_start.gte.${dayEnd.toISOString()}`)
+    .or(
+      `scheduled_start.lt.${windowStart.toISOString()},scheduled_start.gte.${windowEnd.toISOString()}`
+    )
     .select('id');
 
   if (staleOutsideError) {
     throw staleOutsideError;
   }
 
-  // Remove today's Google tasks that were cancelled / no longer returned by Google.
+  // Remove in-window Google tasks that were cancelled / no longer returned by Google.
   let cleanedToday = 0;
-  const { data: todaysGoogleTasks, error: todayQueryError } = await supabase
+  const { data: windowGoogleTasks, error: todayQueryError } = await supabase
     .from('tasks')
     .select('id,google_event_id')
     .eq('user_id', userId)
     .not('google_event_id', 'is', null)
-    .gte('scheduled_start', dayStart.toISOString())
-    .lt('scheduled_start', dayEnd.toISOString());
+    .gte('scheduled_start', windowStart.toISOString())
+    .lt('scheduled_start', windowEnd.toISOString());
 
   if (todayQueryError) {
     throw todayQueryError;
   }
 
   const keep = new Set(importedEventIds);
-  const toDelete = (todaysGoogleTasks ?? [])
+  const toDelete = (windowGoogleTasks ?? [])
     .filter((task) => task.google_event_id && !keep.has(task.google_event_id))
     .map((task) => task.id);
 

@@ -9,8 +9,8 @@ type AutoScheduleRefresherProps = {
   isCalendarConnected: boolean;
 };
 
-const PERIODIC_SYNC_MS = 2 * 60 * 1000;
-const MIN_SYNC_GAP_MS = 45 * 1000;
+const PERIODIC_SYNC_MS = 3 * 60 * 1000;
+const MIN_SYNC_GAP_MS = 60 * 1000;
 
 /**
  * Quietly refreshes calendar/schedule:
@@ -62,7 +62,7 @@ export function AutoScheduleRefresher({ isCalendarConnected }: AutoScheduleRefre
 
     const timeoutId = window.setTimeout(() => {
       void refresh(true);
-    }, 2500);
+    }, 800);
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {

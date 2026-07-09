@@ -22,7 +22,7 @@ export default async function PreferencesPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 items-center justify-center px-4 py-12">
+    <div className="flex h-full min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-12">
       <div className="w-full max-w-md">
         <PreferencesForm
           mode="edit"

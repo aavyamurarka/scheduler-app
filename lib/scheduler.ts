@@ -14,6 +14,11 @@ export type SchedulerFlexibleTask = {
   duration_minutes: number;
   priority: number | null;
   deadline: string | null;
+  /** Optional same-day placement window from scheduling notes. */
+  constraints?: {
+    notBefore?: Date;
+    notAfter?: Date;
+  } | null;
 };
 
 export type ScheduledAssignment = {
@@ -145,25 +150,52 @@ function fitsInGap(
   gap: TimeSlot,
   durationMinutes: number,
   deadline: string | null,
-  dayEnd: Date
+  dayEnd: Date,
+  constraints?: SchedulerFlexibleTask['constraints']
 ): boolean {
-  const effectiveDeadline = deadline ? new Date(deadline) : dayEnd;
-  const taskEnd = addMinutes(gap.start, durationMinutes);
+  return findPlacementInGap(gap, durationMinutes, deadline, dayEnd, constraints) !== null;
+}
 
-  if (gapDurationMinutes(gap) < durationMinutes) {
-    return false;
+function findPlacementInGap(
+  gap: TimeSlot,
+  durationMinutes: number,
+  deadline: string | null,
+  dayEnd: Date,
+  constraints?: SchedulerFlexibleTask['constraints']
+): Date | null {
+  const effectiveDeadline = deadline ? new Date(deadline) : dayEnd;
+  let earliest = gap.start;
+  let latestEnd = new Date(Math.min(gap.end.getTime(), effectiveDeadline.getTime()));
+
+  if (constraints?.notBefore && constraints.notBefore > earliest) {
+    earliest = constraints.notBefore;
+  }
+  if (constraints?.notAfter && constraints.notAfter < latestEnd) {
+    latestEnd = constraints.notAfter;
   }
 
-  return taskEnd <= effectiveDeadline;
+  const durationMs = durationMinutes * 60 * 1000;
+  const latestStart = new Date(latestEnd.getTime() - durationMs);
+
+  if (latestStart < earliest) {
+    return null;
+  }
+
+  if (gapDurationMinutes({ start: earliest, end: latestEnd }) < durationMinutes) {
+    return null;
+  }
+
+  return new Date(earliest);
 }
 
 function findGapIndex(
   gaps: TimeSlot[],
-  durationMinutes: number,
-  deadline: string | null,
+  task: SchedulerFlexibleTask,
   dayEnd: Date
 ): number {
-  return gaps.findIndex((gap) => fitsInGap(gap, durationMinutes, deadline, dayEnd));
+  return gaps.findIndex((gap) =>
+    fitsInGap(gap, task.duration_minutes, task.deadline, dayEnd, task.constraints)
+  );
 }
 
 export function scheduleDay(
@@ -191,7 +223,7 @@ export function scheduleDay(
   const unscheduled: string[] = [];
 
   for (const task of sortedFlexible) {
-    const gapIndex = findGapIndex(gaps, task.duration_minutes, task.deadline, dayEnd);
+    const gapIndex = findGapIndex(gaps, task, dayEnd);
 
     if (gapIndex === -1) {
       unscheduled.push(task.id);
@@ -199,7 +231,19 @@ export function scheduleDay(
     }
 
     const gap = gaps[gapIndex];
-    const scheduledStart = new Date(gap.start);
+    const scheduledStart = findPlacementInGap(
+      gap,
+      task.duration_minutes,
+      task.deadline,
+      dayEnd,
+      task.constraints
+    );
+
+    if (!scheduledStart) {
+      unscheduled.push(task.id);
+      continue;
+    }
+
     const scheduledEnd = addMinutes(scheduledStart, task.duration_minutes);
 
     scheduled.push({

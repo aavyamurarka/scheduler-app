@@ -1,7 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { getDayBoundsFromPreferences, type DayBounds } from '@/lib/day-bounds';
+import {
+  getDayBoundsFromPreferences,
+  getTodayDateParts,
+  type DayBounds,
+} from '@/lib/day-bounds';
 import { getUserPreferences } from '@/lib/preferences';
+import { interpretSchedulingNotes } from '@/lib/scheduling-notes';
 import {
   compareSchedules,
   computeFreeGaps,
@@ -67,8 +72,10 @@ export async function requireUserPreferences(
 export async function getSchedulableTasks(
   supabase: SupabaseClient,
   userId: string,
-  bounds: DayBounds
+  bounds: DayBounds,
+  options: { includePendingFlexible?: boolean } = {}
 ): Promise<Task[]> {
+  const includePendingFlexible = options.includePendingFlexible ?? true;
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
@@ -83,7 +90,11 @@ export async function getSchedulableTasks(
 
   return (data ?? []).filter((task) => {
     if (task.task_type === 'flexible') {
-      return true;
+      if (task.scheduled_start) {
+        return isTaskScheduledToday(task, dayStart, dayEnd);
+      }
+      // Pending flexibles only fill today's gaps — not tomorrow's preview day.
+      return includePendingFlexible;
     }
 
     return isTaskScheduledToday(task, dayStart, dayEnd);
@@ -141,7 +152,8 @@ function scheduleUnlockedFlexible(
   tasks: Task[],
   dayStart: Date,
   dayEnd: Date,
-  scheduleFrom: Date
+  scheduleFrom: Date,
+  timeZone: string
 ): ScheduleDayResult {
   const fixedTasks = toBlockingFixedTasks(tasks);
 
@@ -152,6 +164,7 @@ function scheduleUnlockedFlexible(
       duration_minutes: task.duration_minutes,
       priority: task.priority,
       deadline: task.deadline,
+      constraints: interpretSchedulingNotes(task.notes, dayStart, dayEnd, timeZone),
     }));
 
   return scheduleDay(fixedTasks, flexibleTasks, dayStart, dayEnd, scheduleFrom);
@@ -164,15 +177,26 @@ async function applyFlexibleScheduleUpdates(
   result: ScheduleDayResult
 ): Promise<void> {
   const unscheduledIds = new Set(result.unscheduled);
+  const assignmentById = new Map(result.scheduled.map((item) => [item.id, item]));
   const unlocked = tasks.filter(
     (task) => task.task_type === 'flexible' && !isManuallyLockedFlexible(task)
   );
 
   const updates = unlocked
     .map((task) => {
-      const assignment = result.scheduled.find((item) => item.id === task.id);
+      const assignment = assignmentById.get(task.id);
 
       if (assignment) {
+        // Skip no-op writes — biggest win when re-running the same day schedule.
+        if (
+          task.scheduled_start === assignment.scheduled_start &&
+          task.scheduled_end === assignment.scheduled_end &&
+          task.status === 'scheduled' &&
+          !task.manual_lock
+        ) {
+          return null;
+        }
+
         return supabase
           .from('tasks')
           .update({
@@ -186,6 +210,15 @@ async function applyFlexibleScheduleUpdates(
       }
 
       if (unscheduledIds.has(task.id)) {
+        if (
+          task.scheduled_start == null &&
+          task.scheduled_end == null &&
+          task.status === 'pending' &&
+          !task.manual_lock
+        ) {
+          return null;
+        }
+
         return supabase
           .from('tasks')
           .update({
@@ -202,6 +235,10 @@ async function applyFlexibleScheduleUpdates(
     })
     .filter((update): update is NonNullable<typeof update> => update !== null);
 
+  if (updates.length === 0) {
+    return;
+  }
+
   const responses = await Promise.all(updates);
   const failed = responses.find((response) => response.error);
 
@@ -210,17 +247,58 @@ async function applyFlexibleScheduleUpdates(
   }
 }
 
+function scheduleFromForBounds(
+  preferences: UserPreferences,
+  dayStart: Date,
+  referenceDate: Date
+): Date {
+  const now = new Date();
+  return isSameCalendarDay(preferences.timezone, referenceDate, now)
+    ? now
+    : dayStart;
+}
+
+function shouldFillPendingFlexible(
+  preferences: UserPreferences,
+  referenceDate: Date
+): boolean {
+  return isSameCalendarDay(preferences.timezone, referenceDate, new Date());
+}
+
+function isSameCalendarDay(
+  timeZone: string,
+  a: Date,
+  b: Date
+): boolean {
+  const left = getTodayDateParts(timeZone, a);
+  const right = getTodayDateParts(timeZone, b);
+  return (
+    left.year === right.year &&
+    left.month === right.month &&
+    left.day === right.day
+  );
+}
+
 export async function runDaySchedule(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  referenceDate: Date = new Date()
 ): Promise<ScheduleDayResult> {
   const preferences = await requireUserPreferences(supabase, userId);
-  const bounds = getDayBoundsFromPreferences(preferences);
-  const tasks = await getSchedulableTasks(supabase, userId, bounds);
+  const bounds = getDayBoundsFromPreferences(preferences, referenceDate);
+  const tasks = await getSchedulableTasks(supabase, userId, bounds, {
+    includePendingFlexible: shouldFillPendingFlexible(preferences, referenceDate),
+  });
   const { dayStart, dayEnd } = bounds;
 
-  const scheduleFrom = new Date();
-  const result = scheduleUnlockedFlexible(tasks, dayStart, dayEnd, scheduleFrom);
+  const scheduleFrom = scheduleFromForBounds(preferences, dayStart, referenceDate);
+  const result = scheduleUnlockedFlexible(
+    tasks,
+    dayStart,
+    dayEnd,
+    scheduleFrom,
+    preferences.timezone
+  );
   await applyFlexibleScheduleUpdates(supabase, userId, tasks, result);
 
   return result;
@@ -264,16 +342,25 @@ function toReshuffleNotices(changes: ScheduleChange[], tasks: Task[]): Reshuffle
 
 export async function runDayScheduleWithNotices(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  referenceDate: Date = new Date()
 ): Promise<RunDayScheduleWithNoticesResult> {
   const preferences = await requireUserPreferences(supabase, userId);
-  const bounds = getDayBoundsFromPreferences(preferences);
-  const tasks = await getSchedulableTasks(supabase, userId, bounds);
+  const bounds = getDayBoundsFromPreferences(preferences, referenceDate);
+  const tasks = await getSchedulableTasks(supabase, userId, bounds, {
+    includePendingFlexible: shouldFillPendingFlexible(preferences, referenceDate),
+  });
   const before = buildBeforeMap(tasks);
 
   const { dayStart, dayEnd } = bounds;
-  const scheduleFrom = new Date();
-  const result = scheduleUnlockedFlexible(tasks, dayStart, dayEnd, scheduleFrom);
+  const scheduleFrom = scheduleFromForBounds(preferences, dayStart, referenceDate);
+  const result = scheduleUnlockedFlexible(
+    tasks,
+    dayStart,
+    dayEnd,
+    scheduleFrom,
+    preferences.timezone
+  );
 
   const changes = compareSchedules(before, result.scheduled);
   const notices = toReshuffleNotices(changes, tasks);

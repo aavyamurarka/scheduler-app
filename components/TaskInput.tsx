@@ -119,27 +119,46 @@ export function TaskInput() {
             />
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="priority" className={labelClass}>
-                Priority
-              </label>
-              <select id="priority" name="priority" required defaultValue={3} className="field">
-                <option value={1}>1 — Highest</option>
-                <option value={2}>2 — High</option>
-                <option value={3}>3 — Medium</option>
-                <option value={4}>4 — Low</option>
-                <option value={5}>5 — Lowest</option>
-              </select>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="priority" className={labelClass}>
+                  Priority
+                </label>
+                <select id="priority" name="priority" required defaultValue={3} className="field">
+                  <option value={1}>1 — Highest</option>
+                  <option value={2}>2 — High</option>
+                  <option value={3}>3 — Medium</option>
+                  <option value={4}>4 — Low</option>
+                  <option value={5}>5 — Lowest</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="deadline" className={labelClass}>
+                  Deadline <span className="font-normal text-[var(--ink-faint)]">(optional)</span>
+                </label>
+                <input id="deadline" name="deadline" type="datetime-local" className="field" />
+              </div>
             </div>
 
             <div>
-              <label htmlFor="deadline" className={labelClass}>
-                Deadline <span className="font-normal text-[var(--ink-faint)]">(optional)</span>
+              <label htmlFor="notes" className={labelClass}>
+                Scheduling notes{' '}
+                <span className="font-normal text-[var(--ink-faint)]">(optional)</span>
               </label>
-              <input id="deadline" name="deadline" type="datetime-local" className="field" />
+              <textarea
+                id="notes"
+                name="notes"
+                rows={2}
+                placeholder="e.g. evenings only after I'm back from uni"
+                className="field"
+              />
+              <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+                Plain language is fine — we&apos;ll try to place it in that window.
+              </p>
             </div>
-          </div>
+          </>
         )}
 
         {state && !state.success && (
