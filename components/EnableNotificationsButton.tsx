@@ -5,6 +5,24 @@ import { useState } from 'react';
 import { savePushSubscriptionAction } from '@/app/actions/push';
 import { enablePushNotifications, getOneSignalAppId } from '@/lib/onesignal-client';
 
+function isIos(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isAndroid(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /android/i.test(navigator.userAgent);
+}
+
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    ('standalone' in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true)
+  );
+}
+
 export function EnableNotificationsButton() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -16,6 +34,14 @@ export function EnableNotificationsButton() {
   async function handleEnable() {
     setStatus('loading');
     setMessage(null);
+
+    if (isIos() && !isStandalonePwa()) {
+      setStatus('error');
+      setMessage(
+        'On iPhone, add Scheduler to your Home Screen first (Safari → Share → Add to Home Screen), then open the app from that icon and enable notifications here.'
+      );
+      return;
+    }
 
     try {
       const result = await enablePushNotifications();
@@ -34,7 +60,11 @@ export function EnableNotificationsButton() {
 
       localStorage.setItem('scheduler_push_prompted', '1');
       setStatus('done');
-      setMessage('Notifications enabled for this browser.');
+      setMessage(
+        isAndroid()
+          ? 'Notifications enabled. Keep Chrome open or in the background to receive reminders.'
+          : 'Notifications enabled for this device.'
+      );
     } catch (err) {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Could not enable notifications.');
@@ -47,6 +77,21 @@ export function EnableNotificationsButton() {
       <p className="mt-1 text-xs text-[var(--ink-muted)]">
         Get a reminder 15 minutes before each scheduled task.
       </p>
+
+      <div className="mt-3 space-y-2 rounded-lg bg-white/50 p-3 text-xs text-[var(--ink-muted)]">
+        <p className="font-medium text-[var(--ink)]">Mobile setup</p>
+        <ul className="list-disc space-y-1 pl-4">
+          <li>
+            <strong>Android:</strong> open in Chrome, tap Enable below, allow notifications.
+          </li>
+          <li>
+            <strong>iPhone:</strong> Safari → Share → Add to Home Screen → open from Home Screen →
+            Enable below.
+          </li>
+          <li>Desktop browsers work too (Chrome, Edge, Firefox).</li>
+        </ul>
+      </div>
+
       <button
         type="button"
         className="btn-primary mt-3 text-xs"

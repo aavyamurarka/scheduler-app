@@ -25,6 +25,8 @@ type DayTimelineProps = {
   tasks: Task[];
   dayStartIso: string;
   dayEndIso: string;
+  externalDragTask?: Task | null;
+  onExternalDragEnd?: () => void;
 };
 
 type DragState = {
@@ -65,7 +67,13 @@ function badgeKind(task: Task): string {
   return 'Auto';
 }
 
-export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps) {
+export function DayTimeline({
+  tasks,
+  dayStartIso,
+  dayEndIso,
+  externalDragTask = null,
+  onExternalDragEnd,
+}: DayTimelineProps) {
   const dayStart = useMemo(() => new Date(dayStartIso), [dayStartIso]);
   const dayEnd = useMemo(() => new Date(dayEndIso), [dayEndIso]);
   const totalMinutes = Math.max(60, minutesBetween(dayStart, dayEnd));
@@ -81,6 +89,10 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   const optimisticRef = useRef<OptimisticMove | null>(null);
 
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [externalDrop, setExternalDrop] = useState<{
+    ghostTop: number;
+    proposedStart: Date | null;
+  } | null>(null);
   const [optimistic, setOptimistic] = useState<OptimisticMove | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -150,8 +162,14 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
   );
 
   const freeGaps = useMemo(
-    () => getTimelineFreeGaps(displayTasks, dayStart, dayEnd, drag?.taskId),
-    [displayTasks, dayStart, dayEnd, drag?.taskId]
+    () =>
+      getTimelineFreeGaps(
+        displayTasks,
+        dayStart,
+        dayEnd,
+        drag?.taskId ?? externalDragTask?.id
+      ),
+    [displayTasks, dayStart, dayEnd, drag?.taskId, externalDragTask?.id]
   );
 
   const hourMarks = useMemo(() => {
@@ -197,6 +215,107 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
   const nowOffset =
     now >= dayStart && now <= dayEnd ? minutesBetween(dayStart, now) * PX_PER_MINUTE : null;
+
+  useEffect(() => {
+    if (!externalDragTask) {
+      setExternalDrop(null);
+    }
+  }, [externalDragTask]);
+
+  function clientYToProposedStart(clientY: number, durationMinutes: number, taskId?: string) {
+    const track = trackRef.current;
+    if (!track) return null;
+
+    const rect = track.getBoundingClientRect();
+    const y = Math.min(
+      Math.max(0, clientY - rect.top - TRACK_EDGE_PAD),
+      heightPxRef.current
+    );
+    const minutes = y / PX_PER_MINUTE;
+    const raw = new Date(dayStartRef.current.getTime() + minutes * 60 * 1000);
+
+    const gaps = getTimelineFreeGaps(
+      tasksRef.current,
+      dayStartRef.current,
+      dayEndRef.current,
+      taskId
+    );
+
+    return clampStartIntoFreeGap(
+      raw,
+      durationMinutes,
+      gaps,
+      dayStartRef.current,
+      dayEndRef.current
+    );
+  }
+
+  function handleExternalDragOver(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    if (!externalDragTask) return;
+
+    const clamped = clientYToProposedStart(
+      event.clientY,
+      externalDragTask.duration_minutes,
+      externalDragTask.id
+    );
+    const ghostTop = clamped
+      ? minutesBetween(dayStartRef.current, clamped) * PX_PER_MINUTE
+      : 0;
+
+    setExternalDrop({ ghostTop, proposedStart: clamped });
+  }
+
+  function commitExternalDrop(clientY: number) {
+    if (!externalDragTask) {
+      onExternalDragEnd?.();
+      setExternalDrop(null);
+      return;
+    }
+
+    const start = clientYToProposedStart(
+      clientY,
+      externalDragTask.duration_minutes,
+      externalDragTask.id
+    );
+
+    if (!start) {
+      onExternalDragEnd?.();
+      setExternalDrop(null);
+      return;
+    }
+
+    const end = new Date(start.getTime() + externalDragTask.duration_minutes * 60 * 1000);
+
+    setOptimistic({
+      taskId: externalDragTask.id,
+      scheduled_start: start.toISOString(),
+      scheduled_end: end.toISOString(),
+      manual_lock: true,
+    });
+    setError(null);
+    setMessage('Pinned to that slot.');
+    onExternalDragEnd?.();
+    setExternalDrop(null);
+
+    startTransition(async () => {
+      const result = await moveFlexibleTaskAction({
+        taskId: externalDragTask.id,
+        scheduledStartIso: start.toISOString(),
+      });
+      if (!result.success) {
+        setOptimistic(null);
+        setError(result.error);
+        setMessage(null);
+      }
+    });
+  }
+
+  function handleExternalDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    commitExternalDrop(event.clientY);
+  }
 
   useEffect(() => {
     function clientYToRawStart(clientY: number, offsetY: number): Date | null {
@@ -374,7 +493,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     <div className="flex min-h-0 flex-col gap-2">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-[var(--ink-muted)]">
-          Drag flexible tasks onto free gaps · snaps to 15 min · fixed blocks stay locked
+          Drag flexible or unscheduled tasks onto free gaps · snaps to 15 min
         </p>
         {isPending ? (
           <span className="text-xs text-[var(--ink-faint)]">Saving…</span>
@@ -421,7 +540,12 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
             ))}
           </div>
 
-          <div ref={trackRef} className="relative select-none">
+          <div
+            ref={trackRef}
+            className={`relative select-none ${externalDragTask ? 'bg-[rgba(95,127,104,0.08)]' : ''}`}
+            onDragOver={handleExternalDragOver}
+            onDrop={handleExternalDrop}
+          >
             {hourMarks.map((mark, index) => (
               <div
                 key={`line-${mark.toISOString()}-${index}`}
@@ -482,6 +606,32 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                 <p className="text-[10px] leading-tight text-[var(--ink-muted)]">
                   {drag.proposedStart
                     ? `${formatHour(drag.proposedStart)} · release to pin`
+                    : 'No free gap here'}
+                </p>
+              </div>
+            ) : null}
+
+            {externalDragTask && externalDrop ? (
+              <div
+                className={`pointer-events-none absolute inset-x-0 z-30 border px-2.5 py-1.5 shadow-md ${
+                  externalDrop.proposedStart
+                    ? 'border-[var(--accent)] bg-[rgba(69,104,83,0.42)]'
+                    : 'border-[#c45c48] bg-[rgba(196,92,72,0.2)]'
+                }`}
+                style={{
+                  top: TRACK_EDGE_PAD + externalDrop.ghostTop,
+                  height: Math.max(
+                    MIN_BLOCK_HEIGHT,
+                    externalDragTask.duration_minutes * PX_PER_MINUTE
+                  ),
+                }}
+              >
+                <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
+                  {externalDragTask.title}
+                </p>
+                <p className="text-[10px] leading-tight text-[var(--ink-muted)]">
+                  {externalDrop.proposedStart
+                    ? `${formatHour(externalDrop.proposedStart)} · drop to pin`
                     : 'No free gap here'}
                 </p>
               </div>

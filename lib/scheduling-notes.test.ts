@@ -54,4 +54,25 @@ describe('interpretSchedulingNotes', () => {
 
     expect(result?.notAfter?.toISOString()).toBe('2026-07-06T12:00:00.000Z');
   });
+
+  it('interprets between 11am and 1pm', () => {
+    const { dayStart, dayEnd } = bounds();
+    const result = interpretSchedulingNotes(
+      'between 11am and 1pm',
+      dayStart,
+      dayEnd,
+      TZ
+    );
+
+    expect(result?.notBefore?.toISOString()).toBe('2026-07-06T11:00:00.000Z');
+    expect(result?.notAfter?.toISOString()).toBe('2026-07-06T13:00:00.000Z');
+  });
+
+  it('interprets from 9am to 12pm', () => {
+    const { dayStart, dayEnd } = bounds();
+    const result = interpretSchedulingNotes('from 9am to 12pm', dayStart, dayEnd, TZ);
+
+    expect(result?.notBefore?.toISOString()).toBe('2026-07-06T09:00:00.000Z');
+    expect(result?.notAfter?.toISOString()).toBe('2026-07-06T12:00:00.000Z');
+  });
 });

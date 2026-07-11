@@ -151,7 +151,7 @@ export function TaskInput() {
                 id="notes"
                 name="notes"
                 rows={2}
-                placeholder="e.g. evenings only after I'm back from uni"
+                placeholder="e.g. between 11am and 1pm, evenings only"
                 className="field"
               />
               <p className="mt-1 text-[11px] text-[var(--ink-faint)]">

@@ -49,6 +49,7 @@ export function HomeSchedule({
   syncLabel,
 }: HomeScheduleProps) {
   const [day, setDay] = useState<DayChoice>(initialDay);
+  const [dragTask, setDragTask] = useState<Task | null>(null);
 
   const onDayChange = useCallback((next: DayChoice) => {
     setDay(next);
@@ -117,7 +118,7 @@ export function HomeSchedule({
               {dayLabel}&apos;s calendar
             </h2>
             <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
-              Free gaps are marked. Drag flexible tasks to pin a slot.
+              Free gaps are marked. Drag tasks from the list or timeline to pin a slot.
             </p>
           </div>
           <DayTimeline
@@ -125,12 +126,14 @@ export function HomeSchedule({
             tasks={tasks}
             dayStartIso={bounds.dayStartIso}
             dayEndIso={bounds.dayEndIso}
+            externalDragTask={dragTask}
+            onExternalDragEnd={() => setDragTask(null)}
           />
         </section>
 
         <aside className="min-h-0 overflow-y-auto lg:h-full">
           <TaskInput />
-          <UnscheduledTaskList tasks={unscheduledTasks} />
+          <UnscheduledTaskList tasks={unscheduledTasks} onDragTaskChange={setDragTask} />
         </aside>
       </main>
     </div>

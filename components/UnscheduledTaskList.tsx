@@ -4,6 +4,7 @@ import { TaskActions } from '@/components/TaskActions';
 
 type UnscheduledTaskListProps = {
   tasks: Task[];
+  onDragTaskChange?: (task: Task | null) => void;
 };
 
 function formatDeadline(iso: string): string {
@@ -15,7 +16,7 @@ function formatDeadline(iso: string): string {
   });
 }
 
-export function UnscheduledTaskList({ tasks }: UnscheduledTaskListProps) {
+export function UnscheduledTaskList({ tasks, onDragTaskChange }: UnscheduledTaskListProps) {
   if (tasks.length === 0) {
     return null;
   }
@@ -26,14 +27,21 @@ export function UnscheduledTaskList({ tasks }: UnscheduledTaskListProps) {
         Couldn&apos;t schedule
       </h2>
       <p className="mt-1 text-xs text-[var(--ink-muted)]">
-        No free slot fit these tasks. Try reschedule or delete if plans changed.
+        Drag a task onto a free gap in the calendar, or use reschedule / delete below.
       </p>
 
       <ul className="mt-4 space-y-2">
         {tasks.map((task) => (
           <li
             key={task.id}
-            className="rounded-xl border border-[rgba(154,122,48,0.28)] bg-[var(--warn-soft)] px-3 py-3"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData('text/plain', task.id);
+              event.dataTransfer.effectAllowed = 'move';
+              onDragTaskChange?.(task);
+            }}
+            onDragEnd={() => onDragTaskChange?.(null)}
+            className="cursor-grab rounded-xl border border-[rgba(154,122,48,0.28)] bg-[var(--warn-soft)] px-3 py-3 active:cursor-grabbing"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -46,7 +54,7 @@ export function UnscheduledTaskList({ tasks }: UnscheduledTaskListProps) {
                   <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{task.notes}</p>
                 ) : null}
               </div>
-              <span className="badge badge-muted shrink-0 text-[var(--warn)]">No slot</span>
+              <span className="badge badge-muted shrink-0 text-[var(--warn)]">Drag me</span>
             </div>
             <div className="mt-3 border-t border-[rgba(154,122,48,0.2)] pt-3">
               <TaskActions task={task} />

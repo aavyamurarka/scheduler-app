@@ -1,0 +1,17 @@
+{
+  "name": "Scheduler",
+  "short_name": "Scheduler",
+  "description": "Auto-schedule your day around fixed commitments",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8efe6",
+  "theme_color": "#456853",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

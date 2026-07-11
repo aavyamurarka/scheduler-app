@@ -9,6 +9,9 @@ export type SchedulingConstraints = {
 /** Day-level hint from notes — when to place a pending flexible task. */
 export type NotesTargetDay = 'today' | 'tomorrow';
 
+const CLOCK_FRAGMENT =
+  /(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+
 /**
  * Which calendar day the user wants (if stated).
  * null = no preference → schedule into today by default.
@@ -44,8 +47,12 @@ function wallOnDay(
   return wallClockInZoneToDate(year, month, day, hour, minute, timeZone);
 }
 
-function parseClockTime(text: string): { hour: number; minute: number } | null {
-  const match = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+export function parseClockTime(text: string): { hour: number; minute: number } | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const glued = trimmed.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)$/i);
+  const match = glued ?? trimmed.match(CLOCK_FRAGMENT);
   if (!match) return null;
 
   let hour = Number(match[1]);
@@ -57,13 +64,27 @@ function parseClockTime(text: string): { hour: number; minute: number } | null {
 
   if (meridiem === 'pm' && hour < 12) hour += 12;
   if (meridiem === 'am' && hour === 12) hour = 0;
-  if (!meridiem && hour <= 12 && /pm/i.test(text)) {
-    // "after 5" with pm elsewhere in phrase
-    if (hour < 12) hour += 12;
-  }
 
   if (hour < 0 || hour > 23) return null;
   return { hour, minute };
+}
+
+function parseRangeEndpoints(text: string): [string, string] | null {
+  const between = text.match(
+    /\bbetween\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+and\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i
+  );
+  if (between) {
+    return [between[1], between[2]];
+  }
+
+  const fromTo = text.match(
+    /\bfrom\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+(?:to|until|till|-)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i
+  );
+  if (fromTo) {
+    return [fromTo[1], fromTo[2]];
+  }
+
+  return null;
 }
 
 /**
@@ -85,7 +106,7 @@ export function interpretSchedulingNotes(
   // Day-only phrases are handled by notesTargetDay — not time windows.
   const dayOnly =
     notesTargetDay(notes) !== null &&
-    !/\b(morning|afternoon|evening|night|after|before)\b/.test(text);
+    !/\b(morning|afternoon|evening|night|after|before|between|from)\b/.test(text);
   if (dayOnly) return null;
 
   const setNotBefore = (hour: number, minute: number) => {
@@ -99,6 +120,14 @@ export function interpretSchedulingNotes(
     if (candidate > dayEnd) return;
     if (!notAfter || candidate < notAfter) notAfter = candidate;
   };
+
+  const range = parseRangeEndpoints(text);
+  if (range) {
+    const start = parseClockTime(range[0]);
+    const end = parseClockTime(range[1]);
+    if (start) setNotBefore(start.hour, start.minute);
+    if (end) setNotAfter(end.hour, end.minute);
+  }
 
   if (/\b(morning|mornings)\b/.test(text) && !/\b(afternoon|evening)\b/.test(text)) {
     setNotAfter(MORNING_END.hour, MORNING_END.minute);
@@ -121,17 +150,13 @@ export function interpretSchedulingNotes(
     setNotBefore(EVENING_START.hour, EVENING_START.minute);
   }
 
-  const afterMatch = text.match(
-    /\bafter\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i
-  );
+  const afterMatch = text.match(/\bafter\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i);
   if (afterMatch) {
     const parsed = parseClockTime(afterMatch[1]);
     if (parsed) setNotBefore(parsed.hour, parsed.minute);
   }
 
-  const beforeMatch = text.match(
-    /\bbefore\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i
-  );
+  const beforeMatch = text.match(/\bbefore\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i);
   if (beforeMatch) {
     const parsed = parseClockTime(beforeMatch[1]);
     if (parsed) setNotAfter(parsed.hour, parsed.minute);
