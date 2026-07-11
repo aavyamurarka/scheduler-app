@@ -94,3 +94,19 @@ export async function createTask(
 
   return data;
 }
+
+export async function deleteTask(
+  supabase: SupabaseClient,
+  userId: string,
+  taskId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('id', taskId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+}

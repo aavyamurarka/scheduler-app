@@ -120,12 +120,18 @@ export async function getSchedulableTasks(
 export function partitionDayView(
   tasks: Task[],
   bounds: DayBounds,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options: {
+    timeZone?: string;
+    referenceDate?: Date;
+    includePendingFlexible?: boolean;
+  } = {}
 ): {
   scheduled: Task[];
   unscheduled: Task[];
 } {
   const { dayStart, dayEnd } = bounds;
+  const timeZone = options.timeZone ?? 'UTC';
 
   const scheduled = tasks
     .filter(
@@ -141,12 +147,11 @@ export function partitionDayView(
         new Date(a.scheduled_start!).getTime() - new Date(b.scheduled_start!).getTime()
     );
 
-  const unscheduled = tasks.filter(
-    (task) =>
-      task.task_type === 'flexible' &&
-      task.status === 'pending' &&
-      !task.scheduled_start
-  );
+  const unscheduled = getUnscheduledTasksForDay(tasks, bounds, {
+    timeZone,
+    referenceDate: options.referenceDate ?? bounds.dayStart,
+    includePendingFlexible: options.includePendingFlexible ?? true,
+  });
 
   return { scheduled, unscheduled };
 }
@@ -297,6 +302,74 @@ function isSameCalendarDay(
     left.year === right.year &&
     left.month === right.month &&
     left.day === right.day
+  );
+}
+
+/** Sync filter matching getSchedulableTasks day scope (for UI lists). */
+export function filterTasksForDayView(
+  tasks: Task[],
+  bounds: DayBounds,
+  options: {
+    timeZone: string;
+    referenceDate?: Date;
+    includePendingFlexible?: boolean;
+  }
+): Task[] {
+  const includePendingFlexible = options.includePendingFlexible ?? true;
+  const timeZone = options.timeZone;
+  const referenceDate = options.referenceDate ?? bounds.dayStart;
+  const now = new Date();
+  const { dayStart, dayEnd } = bounds;
+
+  const schedulingToday = isSameCalendarDay(timeZone, referenceDate, now);
+  const schedulingTomorrow = isSameCalendarDay(
+    timeZone,
+    referenceDate,
+    addCalendarDays(timeZone, now, 1)
+  );
+
+  return tasks.filter((task) => {
+    if (task.status === 'completed') {
+      return false;
+    }
+
+    if (task.task_type === 'flexible') {
+      if (task.scheduled_start) {
+        return isTaskScheduledToday(task, dayStart, dayEnd);
+      }
+
+      if (!includePendingFlexible) {
+        return false;
+      }
+
+      const target = notesTargetDay(task.notes);
+      if (target === 'tomorrow') {
+        return schedulingTomorrow;
+      }
+      if (target === 'today') {
+        return schedulingToday;
+      }
+      return schedulingToday;
+    }
+
+    return isTaskScheduledToday(task, dayStart, dayEnd);
+  });
+}
+
+export function getUnscheduledTasksForDay(
+  tasks: Task[],
+  bounds: DayBounds,
+  options: {
+    timeZone: string;
+    referenceDate?: Date;
+    includePendingFlexible?: boolean;
+  }
+): Task[] {
+  return filterTasksForDayView(tasks, bounds, options).filter(
+    (task) =>
+      task.task_type === 'flexible' &&
+      task.status === 'pending' &&
+      !task.scheduled_start
   );
 }
 

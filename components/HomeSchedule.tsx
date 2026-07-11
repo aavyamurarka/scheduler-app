@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { AutoEnableNotifications } from '@/components/AutoEnableNotifications';
 import { AutoScheduleRefresher } from '@/components/AutoScheduleRefresher';
@@ -10,6 +10,8 @@ import { DayToggle } from '@/components/DayToggle';
 import { RealtimeScheduleRefresher } from '@/components/RealtimeScheduleRefresher';
 import { SignOutButton } from '@/components/SignOutButton';
 import { TaskInput } from '@/components/TaskInput';
+import { UnscheduledTaskList } from '@/components/UnscheduledTaskList';
+import { getUnscheduledTasksForDay } from '@/lib/schedule-service';
 import type { Task } from '@/lib/types';
 
 type DayChoice = 'today' | 'tomorrow';
@@ -22,6 +24,7 @@ type DayBoundsIso = {
 type HomeScheduleProps = {
   userId: string;
   tasks: Task[];
+  timeZone: string;
   todayBounds: DayBoundsIso;
   tomorrowBounds: DayBoundsIso;
   initialDay: DayChoice;
@@ -38,6 +41,7 @@ function syncUrl(day: DayChoice) {
 export function HomeSchedule({
   userId,
   tasks,
+  timeZone,
   todayBounds,
   tomorrowBounds,
   initialDay,
@@ -53,6 +57,20 @@ export function HomeSchedule({
 
   const bounds = day === 'tomorrow' ? tomorrowBounds : todayBounds;
   const dayLabel = day === 'tomorrow' ? 'Tomorrow' : 'Today';
+
+  const unscheduledTasks = useMemo(() => {
+    const dayStart = new Date(bounds.dayStartIso);
+    const dayEnd = new Date(bounds.dayEndIso);
+    return getUnscheduledTasksForDay(
+      tasks,
+      { dayStart, dayEnd },
+      {
+        timeZone,
+        referenceDate: dayStart,
+        includePendingFlexible: true,
+      }
+    );
+  }, [tasks, bounds.dayStartIso, bounds.dayEndIso, timeZone]);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -112,6 +130,7 @@ export function HomeSchedule({
 
         <aside className="min-h-0 overflow-y-auto lg:h-full">
           <TaskInput />
+          <UnscheduledTaskList tasks={unscheduledTasks} />
         </aside>
       </main>
     </div>

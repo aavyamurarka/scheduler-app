@@ -56,6 +56,7 @@ export default async function Home({ searchParams }: HomeProps) {
     <HomeSchedule
       userId={user.id}
       tasks={tasks}
+      timeZone={preferences.timezone}
       todayBounds={{
         dayStartIso: todayBounds.dayStart.toISOString(),
         dayEndIso: todayBounds.dayEnd.toISOString(),

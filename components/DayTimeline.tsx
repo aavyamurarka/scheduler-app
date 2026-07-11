@@ -6,6 +6,7 @@ import {
   clearManualLockAction,
   moveFlexibleTaskAction,
 } from '@/app/actions/tasks';
+import { TaskActions } from '@/components/TaskActions';
 import {
   clampStartIntoFreeGap,
   getTimelineFreeGaps,
@@ -148,16 +149,6 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
     [displayTasks, dayStart, dayEnd]
   );
 
-  const unscheduled = useMemo(
-    () =>
-      displayTasks.filter(
-        (task) =>
-          task.task_type === 'flexible' &&
-          (task.status === 'pending' || !task.scheduled_start)
-      ),
-    [displayTasks]
-  );
-
   const freeGaps = useMemo(
     () => getTimelineFreeGaps(displayTasks, dayStart, dayEnd, drag?.taskId),
     [displayTasks, dayStart, dayEnd, drag?.taskId]
@@ -206,7 +197,6 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
 
   const nowOffset =
     now >= dayStart && now <= dayEnd ? minutesBetween(dayStart, now) * PX_PER_MINUTE : null;
-  const showUnscheduled = now >= dayStart;
 
   useEffect(() => {
     function clientYToRawStart(clientY: number, offsetY: number): Date | null {
@@ -517,11 +507,12 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
               return (
                 <div
                   key={task.id}
+                  data-task-block
                   onPointerDown={(event) => {
                     if (!isFlexible) return;
                     beginDrag(task, event);
                   }}
-                  className={`absolute inset-x-0 z-[5] border px-2.5 py-1 shadow-sm transition-opacity ${
+                  className={`group absolute inset-x-0 z-[5] border px-2.5 py-1 shadow-sm transition-opacity ${
                     isDragging ? 'opacity-25' : 'opacity-100'
                   } ${
                     isNow
@@ -533,8 +524,8 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                   style={{ top, height }}
                 >
                   {isCompact ? (
-                    <div className="flex h-full items-center justify-between gap-2">
-                      <div className="min-w-0">
+                    <div className="flex h-full items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
                           {task.title}
                           {isNow ? ' · Now' : ''}
@@ -545,19 +536,22 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                           {` · ${badgeKind(task)}`}
                         </p>
                       </div>
-                      {isManuallyLockedFlexible(task) ? (
-                        <button
-                          type="button"
-                          className="shrink-0 text-[10px] font-medium text-[var(--accent-hot)] underline"
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={() => resetLock(task.id)}
-                        >
-                          Auto
-                        </button>
-                      ) : null}
+                      <div className="flex shrink-0 items-start gap-1">
+                        {isManuallyLockedFlexible(task) ? (
+                          <button
+                            type="button"
+                            className="shrink-0 text-[10px] font-medium text-[var(--accent-hot)] underline"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={() => resetLock(task.id)}
+                          >
+                            Auto
+                          </button>
+                        ) : null}
+                        <TaskActions task={task} variant="menu" />
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex h-full items-start justify-between gap-2 overflow-hidden">
+                    <div className="flex h-full items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
@@ -597,6 +591,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                             Auto
                           </button>
                         ) : null}
+                        <TaskActions task={task} variant="menu" />
                       </div>
                     </div>
                   )}
@@ -606,30 +601,6 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
           </div>
         </div>
       </div>
-
-      {showUnscheduled && unscheduled.length > 0 ? (
-        <section className="shrink-0">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--warn)]">
-            Couldn&apos;t schedule
-          </h3>
-          <ul className="max-h-28 space-y-2 overflow-y-auto">
-            {unscheduled.map((task) => (
-              <li
-                key={task.id}
-                className="flex items-center justify-between rounded-lg border border-[rgba(154,122,48,0.28)] bg-[var(--warn-soft)] px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-medium text-[var(--ink)]">{task.title}</p>
-                  <p className="text-xs text-[var(--ink-muted)]">
-                    {task.duration_minutes} min · {priorityLabel(task.priority)}
-                  </p>
-                </div>
-                <span className="badge badge-muted text-[var(--warn)]">No slot</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }
