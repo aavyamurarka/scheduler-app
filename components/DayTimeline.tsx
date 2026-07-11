@@ -512,7 +512,7 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                     if (!isFlexible) return;
                     beginDrag(task, event);
                   }}
-                  className={`group absolute inset-x-0 z-[5] border px-2.5 py-1 shadow-sm transition-opacity ${
+                  className={`group relative overflow-visible absolute inset-x-0 z-[5] border px-2.5 py-1 shadow-sm transition-opacity ${
                     isDragging ? 'opacity-25' : 'opacity-100'
                   } ${
                     isNow
@@ -523,78 +523,38 @@ export function DayTimeline({ tasks, dayStartIso, dayEndIso }: DayTimelineProps)
                   } ${isFlexible ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-default'}`}
                   style={{ top, height }}
                 >
-                  {isCompact ? (
-                    <div className="flex h-full items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
+                  <div className="flex h-full flex-col justify-center pr-8">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
                           {task.title}
                           {isNow ? ' · Now' : ''}
                         </p>
-                        <p className="truncate text-[10px] leading-tight text-[var(--ink-muted)]">
-                          {formatHour(start)}–{formatHour(end)}
-                          {isFlexible ? ` · ${priorityLabel(task.priority)}` : ''}
-                          {` · ${badgeKind(task)}`}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-start gap-1">
-                        {isManuallyLockedFlexible(task) ? (
-                          <button
-                            type="button"
-                            className="shrink-0 text-[10px] font-medium text-[var(--accent-hot)] underline"
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={() => resetLock(task.id)}
-                          >
-                            Auto
-                          </button>
-                        ) : null}
-                        <TaskActions task={task} variant="menu" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex h-full items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="truncate text-xs font-semibold leading-tight text-[var(--ink)]">
-                            {task.title}
-                          </p>
-                          {isNow ? (
-                            <span className="rounded bg-[#c45c48] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                              Now
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 text-[10px] leading-tight text-[var(--ink-muted)]">
-                          {formatHour(start)} – {formatHour(end)}
-                          {task.duration_minutes ? ` · ${task.duration_minutes}m` : ''}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        {isFlexible ? (
-                          <span
-                            className={`badge ${
-                              (task.priority ?? 3) <= 2 ? 'badge-accent' : 'badge-muted'
-                            }`}
-                          >
-                            {priorityLabel(task.priority)}
+                        {!isCompact && isNow ? (
+                          <span className="rounded bg-[#c45c48] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                            Now
                           </span>
                         ) : null}
-                        <span className={`badge ${isFixed ? 'badge-muted' : 'badge-accent'}`}>
-                          {badgeKind(task)}
-                        </span>
-                        {isManuallyLockedFlexible(task) ? (
-                          <button
-                            type="button"
-                            className="text-[10px] font-medium text-[var(--accent-hot)] underline"
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={() => resetLock(task.id)}
-                          >
-                            Auto
-                          </button>
-                        ) : null}
-                        <TaskActions task={task} variant="menu" />
                       </div>
+                      <p className="truncate text-[10px] leading-tight text-[var(--ink-muted)]">
+                        {formatHour(start)}–{formatHour(end)}
+                        {task.duration_minutes ? ` · ${task.duration_minutes}m` : ''}
+                        {isFlexible ? ` · ${priorityLabel(task.priority)}` : ''}
+                        {` · ${badgeKind(task)}`}
+                      </p>
                     </div>
-                  )}
+                    {isManuallyLockedFlexible(task) ? (
+                      <button
+                        type="button"
+                        className="mt-0.5 w-fit text-[10px] font-medium text-[var(--accent-hot)] underline"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={() => resetLock(task.id)}
+                      >
+                        Back to auto
+                      </button>
+                    ) : null}
+                  </div>
+                  <TaskActions task={task} variant="menu" />
                 </div>
               );
             })}

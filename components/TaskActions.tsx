@@ -16,6 +16,11 @@ type TaskActionsProps = {
   onDone?: () => void;
 };
 
+type MenuPosition = {
+  top: number;
+  left: number;
+};
+
 function toDateTimeLocalValue(iso: string | null): string {
   if (!iso) {
     const now = new Date();
@@ -32,125 +37,36 @@ function toDateTimeLocalValue(iso: string | null): string {
   return local.toISOString().slice(0, 16);
 }
 
-type MenuPanelProps = {
-  task: Task;
-  isPending: boolean;
-  error: string | null;
-  editingFixed: boolean;
-  fixedStart: string;
-  onFlexibleReschedule: () => void;
-  onFixedReschedule: () => void;
-  onDelete: () => void;
-  onFixedStartChange: (value: string) => void;
-  onSubmitFixed: () => void;
-  onCancelFixed: () => void;
-  onClose: () => void;
-  className?: string;
-};
+const MENU_WIDTH = 148;
 
-function MenuPanel({
-  task,
-  isPending,
-  error,
-  editingFixed,
-  fixedStart,
-  onFlexibleReschedule,
-  onFixedReschedule,
-  onDelete,
-  onFixedStartChange,
-  onSubmitFixed,
-  onCancelFixed,
-  onClose,
-  className = '',
-}: MenuPanelProps) {
-  return (
-    <div
-      className={`flex flex-col gap-1 ${className}`}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      {task.task_type === 'flexible' ? (
-        <button
-          type="button"
-          className="rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--ink)] hover:bg-white/70 disabled:opacity-50"
-          disabled={isPending}
-          onClick={onFlexibleReschedule}
-        >
-          {isPending ? 'Working…' : 'Reschedule'}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--ink)] hover:bg-white/70"
-          disabled={isPending}
-          onClick={onFixedReschedule}
-        >
-          Reschedule
-        </button>
-      )}
-      <button
-        type="button"
-        className="rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)] disabled:opacity-50"
-        disabled={isPending}
-        onClick={onDelete}
-      >
-        Delete
-      </button>
-      {editingFixed && task.task_type === 'fixed' ? (
-        <div className="space-y-2 border-t border-[var(--glass-border)] pt-2">
-          <input
-            type="datetime-local"
-            value={fixedStart}
-            onChange={(event) => onFixedStartChange(event.target.value)}
-            className="field text-xs"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-primary px-2 py-1 text-xs"
-              disabled={isPending}
-              onClick={onSubmitFixed}
-            >
-              {isPending ? 'Saving…' : 'Save time'}
-            </button>
-            <button
-              type="button"
-              className="btn-ghost px-2 py-1 text-xs"
-              disabled={isPending}
-              onClick={onCancelFixed}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {error ? (
-        <p className="px-1 text-[10px] text-[var(--danger)]" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        className="mt-0.5 rounded-md px-2 py-1 text-left text-[10px] text-[var(--ink-faint)] hover:bg-white/60"
-        onClick={onClose}
-      >
-        Close
-      </button>
-    </div>
-  );
+function getMenuPosition(trigger: HTMLElement, menuHeight: number): MenuPosition {
+  const rect = trigger.getBoundingClientRect();
+  const margin = 8;
+  let top = rect.bottom + 4;
+  if (top + menuHeight > window.innerHeight - margin) {
+    top = rect.top - menuHeight - 4;
+  }
+
+  let left = rect.right - MENU_WIDTH;
+  left = Math.max(margin, Math.min(left, window.innerWidth - MENU_WIDTH - margin));
+
+  return { top, left };
 }
 
 export function TaskActions({ task, variant = 'default', onDone }: TaskActionsProps) {
   const [error, setError] = useState<string | null>(null);
   const [editingFixed, setEditingFixed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [fixedStart, setFixedStart] = useState(() =>
     toDateTimeLocalValue(task.scheduled_start)
   );
   const [isPending, startTransition] = useTransition();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isMenu = variant === 'menu';
+  const menuHeight = editingFixed && task.task_type === 'fixed' ? 168 : 88;
 
   useEffect(() => {
     if (!menuOpen) {
@@ -162,20 +78,50 @@ export function TaskActions({ task, variant = 'default', onDone }: TaskActionsPr
       if (triggerRef.current?.contains(target)) {
         return;
       }
-      if (overlayHost?.contains(target)) {
+      if (menuRef.current?.contains(target)) {
         return;
       }
       setMenuOpen(false);
       setEditingFixed(false);
     }
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        setEditingFixed(false);
+      }
+    }
+
     window.addEventListener('pointerdown', onPointerDown);
-    return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [menuOpen, overlayHost]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
 
   function closeMenu() {
     setMenuOpen(false);
     setEditingFixed(false);
+    setMenuPosition(null);
+  }
+
+  function toggleMenu(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    if (menuOpen) {
+      closeMenu();
+      return;
+    }
+
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+
+    setMenuPosition(getMenuPosition(trigger, menuHeight));
+    setMenuOpen(true);
+    setEditingFixed(false);
+    setError(null);
   }
 
   function handleDelete() {
@@ -216,6 +162,10 @@ export function TaskActions({ task, variant = 'default', onDone }: TaskActionsPr
     setEditingFixed(true);
     setFixedStart(toDateTimeLocalValue(task.scheduled_start));
     setError(null);
+    const trigger = triggerRef.current;
+    if (trigger) {
+      setMenuPosition(getMenuPosition(trigger, 168));
+    }
   }
 
   function submitFixedReschedule() {
@@ -234,50 +184,92 @@ export function TaskActions({ task, variant = 'default', onDone }: TaskActionsPr
     });
   }
 
-  const panelProps: MenuPanelProps = {
-    task,
-    isPending,
-    error,
-    editingFixed,
-    fixedStart,
-    onFlexibleReschedule: handleFlexibleReschedule,
-    onFixedReschedule: handleFixedReschedule,
-    onDelete: handleDelete,
-    onFixedStartChange: setFixedStart,
-    onSubmitFixed: submitFixedReschedule,
-    onCancelFixed: () => setEditingFixed(false),
-    onClose: closeMenu,
-  };
-
-  const fixedEditor =
-    editingFixed && task.task_type === 'fixed' ? (
-      <div className="space-y-2">
-        <input
-          type="datetime-local"
-          value={fixedStart}
-          onChange={(event) => setFixedStart(event.target.value)}
-          className="field text-xs"
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-primary px-2 py-1 text-xs"
-            disabled={isPending}
-            onClick={submitFixedReschedule}
+  const menuPopup =
+    menuOpen && menuPosition && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`Options for ${task.title}`}
+            className="fixed z-[100] overflow-hidden rounded-lg border border-[var(--glass-border-strong)] bg-white shadow-lg"
+            style={{
+              top: menuPosition.top,
+              left: menuPosition.left,
+              width: MENU_WIDTH,
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
           >
-            {isPending ? 'Saving…' : 'Save time'}
-          </button>
-          <button
-            type="button"
-            className="btn-ghost px-2 py-1 text-xs"
-            disabled={isPending}
-            onClick={() => setEditingFixed(false)}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    ) : null;
+            {editingFixed && task.task_type === 'fixed' ? (
+              <div className="space-y-2 p-2">
+                <p className="text-[11px] font-medium text-[var(--ink-muted)]">New start time</p>
+                <input
+                  type="datetime-local"
+                  value={fixedStart}
+                  onChange={(event) => setFixedStart(event.target.value)}
+                  className="field text-xs"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary flex-1 px-2 py-1 text-xs"
+                    disabled={isPending}
+                    onClick={submitFixedReschedule}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost px-2 py-1 text-xs"
+                    disabled={isPending}
+                    onClick={() => setEditingFixed(false)}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-1">
+                {task.task_type === 'flexible' ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="block w-full px-3 py-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+                    disabled={isPending}
+                    onClick={handleFlexibleReschedule}
+                  >
+                    {isPending ? 'Working…' : 'Reschedule'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="block w-full px-3 py-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--accent-soft)]"
+                    disabled={isPending}
+                    onClick={handleFixedReschedule}
+                  >
+                    Reschedule
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="block w-full px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--danger-soft)] disabled:opacity-50"
+                  disabled={isPending}
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+            {error ? (
+              <p className="border-t border-[var(--glass-border)] px-3 py-2 text-[11px] text-[var(--danger)]">
+                {error}
+              </p>
+            ) : null}
+          </div>,
+          document.body
+        )
+      : null;
 
   if (isMenu) {
     return (
@@ -286,38 +278,15 @@ export function TaskActions({ task, variant = 'default', onDone }: TaskActionsPr
           ref={triggerRef}
           type="button"
           aria-label={`Options for ${task.title}`}
+          aria-haspopup="menu"
           aria-expanded={menuOpen}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--glass-border-strong)] bg-white text-base font-bold leading-none text-[var(--ink-muted)] shadow-sm hover:bg-[var(--bg-mid)] hover:text-[var(--ink)]"
+          className="absolute right-1.5 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--glass-border)] bg-white/95 text-sm leading-none text-[var(--ink-muted)] shadow-sm hover:border-[var(--glass-border-strong)] hover:text-[var(--ink)]"
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (!menuOpen) {
-              const host = triggerRef.current?.closest('[data-task-block]') as HTMLElement | null;
-              setOverlayHost(host);
-            }
-            setMenuOpen((open) => !open);
-            if (menuOpen) {
-              setEditingFixed(false);
-            }
-          }}
+          onClick={toggleMenu}
         >
           ⋯
         </button>
-
-        {menuOpen && overlayHost
-          ? createPortal(
-              <div
-                className="absolute inset-0 z-40 flex flex-col justify-center rounded-[inherit] bg-[rgba(247,243,234,0.97)] p-2 shadow-inner backdrop-blur-sm"
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <p className="mb-1 truncate px-1 text-[10px] font-semibold text-[var(--ink)]">
-                  {task.title}
-                </p>
-                <MenuPanel {...panelProps} />
-              </div>,
-              overlayHost
-            )
-          : null}
+        {menuPopup}
       </>
     );
   }
@@ -354,7 +323,34 @@ export function TaskActions({ task, variant = 'default', onDone }: TaskActionsPr
         </button>
       </div>
 
-      {fixedEditor}
+      {editingFixed && task.task_type === 'fixed' ? (
+        <div className="space-y-2">
+          <input
+            type="datetime-local"
+            value={fixedStart}
+            onChange={(event) => setFixedStart(event.target.value)}
+            className="field text-xs"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary px-2 py-1 text-xs"
+              disabled={isPending}
+              onClick={submitFixedReschedule}
+            >
+              {isPending ? 'Saving…' : 'Save time'}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost px-2 py-1 text-xs"
+              disabled={isPending}
+              onClick={() => setEditingFixed(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="text-xs text-[var(--danger)]" role="alert">
